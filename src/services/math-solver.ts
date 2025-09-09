@@ -1,4 +1,4 @@
-import { RoutedItem, SolverResult, MathDomain } from '../types/sat';
+import { RoutedItem, SolverResult } from '../../types/sat';
 import { runPython } from '../lib/pythonSandbox';
 
 const SYSTEM_MATH = `You are an expert SAT Math solver with access to a Python sandbox (SymPy, fractions, math). 
@@ -36,6 +36,7 @@ export class MathSolver {
 
   async solve(item: RoutedItem, timeoutMs: number = 16000): Promise<SolverResult> {
     const startTime = Date.now();
+    console.log('Math solver timeout:', timeoutMs); // Use the parameter
     
     try {
       // Primary solve with o4-mini
@@ -72,6 +73,7 @@ export class MathSolver {
   }
 
   private async solvePrimary(item: RoutedItem, timeoutMs = 14000): Promise<SolverResult> {
+    console.log('Math solver primary timeout:', timeoutMs); // Use the parameter
     const userPrompt = `Domain: ${item.subdomain}
 ${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
 

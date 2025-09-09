@@ -4,7 +4,7 @@ import { EBRWSolver } from './ebrw-solver';
 import { MathSolver } from './math-solver';
 import { SATVerifier } from './verifier';
 import { SATAggregator } from './aggregator';
-import { SATSolution, ModelConfig, PerformanceMetrics, EBRWDomain, MathDomain } from '../types/sat';
+import { SATSolution, ModelConfig, PerformanceMetrics, EBRWDomain, MathDomain, SatItem } from '../types/sat';
 
 export class SATEngine {
   private llmClient: LLMClient;
@@ -130,7 +130,18 @@ export class SATEngine {
     
     try {
       // Primary solve with GPT-5
-      const primarySolution = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.6, 15000));
+      const primaryResult = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.6, 15000));
+      
+      // Convert SolverResult to EBRWSolution
+      const primarySolution = {
+        final_choice: primaryResult.final as 'A' | 'B' | 'C' | 'D',
+        confidence_0_1: primaryResult.confidence,
+        domain: primaryResult.meta.domain || routerOutput.subdomain,
+        short_explanation: primaryResult.meta.explanation || 'Solution found',
+        evidence: primaryResult.meta.evidence || [],
+        elimination_notes: primaryResult.meta.elimination_notes || {},
+        model: primaryResult.model as any
+      };
       solutions.push(primarySolution);
       this.metrics.model_usage['gpt-5']++;
       
@@ -143,10 +154,20 @@ export class SATEngine {
       verificationResults.push(primaryVerification);
       
       // Cross-check with Claude if needed
-      if (primarySolution.confidence_0_1 < 0.85 || !primaryVerification.passed) {
+      if (primaryResult.confidence < 0.85 || !primaryVerification.passed) {
         try {
           // Use escalation for cross-check
-          const crossCheckSolution = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.3, 10000));
+          const crossCheckResult = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.3, 10000));
+          
+          const crossCheckSolution = {
+            final_choice: crossCheckResult.final as 'A' | 'B' | 'C' | 'D',
+            confidence_0_1: crossCheckResult.confidence,
+            domain: crossCheckResult.meta.domain || routerOutput.subdomain,
+            short_explanation: crossCheckResult.meta.explanation || 'Cross-check solution',
+            evidence: crossCheckResult.meta.evidence || [],
+            elimination_notes: crossCheckResult.meta.elimination_notes || {},
+            model: crossCheckResult.model as any
+          };
           solutions.push(crossCheckSolution);
           this.metrics.model_usage['claude-3.5-sonnet']++;
           
@@ -162,9 +183,19 @@ export class SATEngine {
       }
 
       // Additional Google Gemini check for complex cases
-      if (solutions.length > 1 && solutions[0].confidence_0_1 < 0.8) {
+      if (solutions.length > 1 && primaryResult.confidence < 0.8) {
         try {
-          const geminiSolution = await this.ebrwSolver.solve(routerOutput, 8000);
+          const geminiResult = await this.ebrwSolver.solve(routerOutput, 8000);
+          
+          const geminiSolution = {
+            final_choice: geminiResult.final as 'A' | 'B' | 'C' | 'D',
+            confidence_0_1: geminiResult.confidence,
+            domain: geminiResult.meta.domain || routerOutput.subdomain,
+            short_explanation: geminiResult.meta.explanation || 'Gemini verification',
+            evidence: geminiResult.meta.evidence || [],
+            elimination_notes: geminiResult.meta.elimination_notes || {},
+            model: geminiResult.model as any
+          };
           solutions.push(geminiSolution);
           this.metrics.model_usage['gemini-2.5-pro']++;
           

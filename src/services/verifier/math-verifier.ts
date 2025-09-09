@@ -1,4 +1,4 @@
-import { RoutedItem, SolverResult, VerifierReport } from '../../types/sat';
+import { RoutedItem, SolverResult, VerifierReport } from '../../../types/sat';
 import { runPython } from '../../lib/pythonSandbox';
 
 export class MathVerifier {

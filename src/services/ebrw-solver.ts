@@ -73,6 +73,7 @@ export class EBRWSolver {
   }
 
   private async solvePrimary(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+    console.log('EBRW solver primary timeout:', timeoutMs); // Use the parameter
     const userPrompt = `Domain: ${item.subdomain}
 
 Question: ${item.normalizedPrompt}
@@ -128,6 +129,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
   }
 
   private async solveEscalated(item: RoutedItem, timeoutMs = 10000): Promise<SolverResult> {
+    console.log('EBRW solver escalated timeout:', timeoutMs); // Use the parameter
     const userPrompt = `Domain: ${item.subdomain}
 
 This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
