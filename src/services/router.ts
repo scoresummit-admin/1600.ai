@@ -126,10 +126,10 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     // Math indicators
     const mathKeywords = ['equation', 'solve', 'graph', 'function', 'angle', 'area', 'volume', 'percent', 'ratio'];
     const isMath = mathKeywords.some(keyword => text.includes(keyword)) || 
-                   /\d+/.test(questionText) || 
                    text.includes('=') || 
-                   text.includes('x') || 
-                   text.includes('y');
+                   text.includes('x²') || 
+                   text.includes('√') ||
+                   /\b\d+\s*[+\-*/]\s*\d+\b/.test(text);
 
     if (isMath) {
       return {
