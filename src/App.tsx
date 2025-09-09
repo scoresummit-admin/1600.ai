@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Brain, Target, Clock, TrendingUp } from 'lucide-react';
 import { QuestionInput } from './components/QuestionInput';
 import { SolutionDisplay } from './components/SolutionDisplay';

@@ -1,5 +1,5 @@
 import { LLMClient } from './llm-client';
-import { EBRWSolution, EBRWDomain, ModelName } from '../types/sat';
+import { EBRWSolution, EBRWDomain } from '../types/sat';
 
 export class EBRWSolver {
   constructor(private llmClient: LLMClient) {}

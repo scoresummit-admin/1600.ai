@@ -49,10 +49,6 @@ export class LLMClient {
     messages: Array<{ role: string; content: string }>,
     options: any
   ): Promise<{ content: string; usage?: any }> {
-    const systemMessage = messages.find(m => m.role === 'system')?.content || '';
-    const userMessage = messages.find(m => m.role === 'user')?.content || '';
-    const fullPrompt = systemMessage ? `${systemMessage}\n\n${userMessage}` : userMessage;
-
     switch (model) {
       case 'gpt-5':
       case 'gpt-5-thinking':
@@ -63,10 +59,16 @@ export class LLMClient {
         return this.callAnthropic(messages, options);
       
       case 'gemini-2.5-pro':
+        const systemMessage = messages.find(m => m.role === 'system')?.content || '';
+        const userMessage = messages.find(m => m.role === 'user')?.content || '';
+        const fullPrompt = systemMessage ? `${systemMessage}\n\n${userMessage}` : userMessage;
         return this.callGemini(fullPrompt, options);
       
       case 'qwen2.5-math-72b':
-        return this.callQwen(fullPrompt, options);
+        const sysMsg = messages.find(m => m.role === 'system')?.content || '';
+        const usrMsg = messages.find(m => m.role === 'user')?.content || '';
+        const qwenPrompt = sysMsg ? `${sysMsg}\n\n${usrMsg}` : usrMsg;
+        return this.callQwen(qwenPrompt, options);
       
       default:
         throw new Error(`Unsupported model: ${model}`);
@@ -88,6 +90,8 @@ export class LLMClient {
       'o4-mini': 'o1-mini'
     };
 
+    const actualModel = modelMap[model as keyof typeof modelMap] || 'gpt-4o';
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -95,7 +99,7 @@ export class LLMClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: modelMap[model] || 'gpt-4o',
+        model: actualModel,
         messages,
         temperature: options.temperature || this.config.temperature,
         max_tokens: options.max_tokens || this.config.max_tokens,
@@ -176,8 +180,8 @@ export class LLMClient {
   }
 
   private async callQwen(
-    prompt: string,
-    options: any
+    _prompt: string,
+    _options: any
   ): Promise<{ content: string; usage?: any }> {
     // Placeholder for Qwen2.5-Math integration
     // This would typically use Azure OpenAI or a custom endpoint

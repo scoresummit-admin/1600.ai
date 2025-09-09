@@ -189,12 +189,17 @@ export class SATAggregator {
     previousSolutions: (EBRWSolution | MathSolution)[],
     timeoutMs: number = 12000
   ): Promise<EBRWSolution | MathSolution> {
+    const solutionSummary = previousSolutions.map(sol => {
+      if ('final_choice' in sol) {
+        return `${sol.model}: ${sol.final_choice}`;
+      } else {
+        return `${sol.model}: ${sol.answer_value_or_choice}`;
+      }
+    }).join(', ');
+
     const systemPrompt = `You are the final arbiter for this SAT question. Previous models disagreed or had low confidence.
 
-Previous attempts: ${previousSolutions.map(sol => 
-      'model' in sol ? `${sol.model}: ${sol.final_choice}` : `${sol.model}: ${sol.answer_value_or_choice}`
-    ).join(', ')}
-
+Previous attempts: ${solutionSummary}
 Use deep reasoning to provide the definitive answer. Return JSON only:
 ${section === 'EBRW' ? `{
   "final_choice": "A|B|C|D",

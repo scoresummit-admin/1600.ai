@@ -131,7 +131,7 @@ ${!isGridIn ? `Choices:\n${choices.map((choice, i) => `${String.fromCharCode(65 
   private async solveWithGPT5Thinking(
     prompt: string, 
     choices: string[], 
-    domain: MathDomain,
+    _domain: MathDomain,
     isGridIn: boolean,
     timeoutMs: number
   ): Promise<MathSolution> {
@@ -176,7 +176,7 @@ ${!isGridIn ? choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choi
   async solveWithGemini(
     prompt: string, 
     choices: string[], 
-    domain: MathDomain,
+    _domain: MathDomain,
     isGridIn: boolean,
     timeoutMs: number = 10000
   ): Promise<MathSolution> {

@@ -97,7 +97,6 @@ export class SATEngine {
   ): Promise<SATSolution> {
     console.log('📚 Solving EBRW question...');
     
-    const solveStartTime = Date.now();
     const solutions = [];
     const verificationResults = [];
     

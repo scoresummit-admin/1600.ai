@@ -1,5 +1,5 @@
 import { LLMClient } from './llm-client';
-import { EBRWSolution, MathSolution, VerificationResult, SATSection } from '../types/sat';
+import { EBRWSolution, MathSolution, VerificationResult } from '../types/sat';
 
 export class SATVerifier {
   constructor(private llmClient: LLMClient) {}
@@ -182,7 +182,6 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
   private verifyDomain(solution: MathSolution, prompt: string): { valid: boolean; notes: string[] } {
     // Basic domain validation
     const answer = solution.answer_value_or_choice;
-    const notes: string[] = [];
     
     // Check for common domain issues
     if (typeof answer === 'string' && !isNaN(Number(answer))) {
@@ -219,6 +218,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
 
   private async verifySubstitution(solution: MathSolution, prompt: string): Promise<{ valid: boolean; notes: string[] }> {
     // For now, assume substitution is valid if it was checked
+    console.log('Verifying substitution for:', prompt.substring(0, 50));
     if (solution.checks.includes('substitute_back')) {
       return { valid: true, notes: ['✓ Substitution check passed'] };
     }
