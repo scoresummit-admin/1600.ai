@@ -245,8 +245,5 @@ export class LLMClient {
 
   updateConfig(newConfig: Partial<ModelConfig>) {
     this.config = { ...this.config, ...newConfig };
-    if (newConfig.google_api_key) {
-      this.googleAI = new GoogleGenerativeAI(newConfig.google_api_key);
-    }
   }
 }
