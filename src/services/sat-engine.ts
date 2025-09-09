@@ -92,10 +92,6 @@ export class SATEngine {
       console.error('❌ SAT Engine error:', error);
       
       // Determine section for fallback
-      const fallbackSection = 'EBRW';
-      const fallbackSubdomain = fallbackSection === 'EBRW' ? 'information_ideas' : 'algebra';
-      
-      // Return fallback solution
       return {
         final_choice_or_value: 'A',
         section: 'EBRW',
