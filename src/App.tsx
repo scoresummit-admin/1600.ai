@@ -22,11 +22,8 @@ function App() {
       return;
     }
     
-    // Warn about missing Anthropic key but don't block execution
-    const hasAnthropic = !!(import.meta.env.VITE_ANTHROPIC_API_KEY);
-    if (!hasAnthropic) {
-      console.warn('Anthropic API key not found. Verification will use fallback method.');
-    }
+    // Note: Anthropic and Google API keys are now handled server-side
+    console.log('Starting SAT question solving with server-side API integration...');
 
     setIsLoading(true);
     setSolution(null);

@@ -1,11 +1,7 @@
 import { RoutedItem, SolverResult, VerifierReport } from '../../../types/sat';
 
 export class EBRWVerifier {
-  private anthropicApiKey: string;
-
-  constructor() {
-    this.anthropicApiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
-  }
+  constructor() {}
 
   async verify(item: RoutedItem, solverResult: SolverResult): Promise<VerifierReport> {
     const startTime = Date.now();
@@ -101,45 +97,27 @@ Return JSON:
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
     try {
-      // Add timeout to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Call our serverless function instead of Anthropic directly
+      const response = await fetch('/api/anthropic', {
         method: 'POST',
         headers: {
-          'x-api-key': this.anthropicApiKey,
           'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022',
-          messages: [
-            { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
-          ],
+          messages: [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }],
           max_tokens: 500,
           temperature: 0.1,
         }),
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.warn(`Anthropic API error (${response.status}): ${response.statusText} - ${errorText}`);
-        
-        // For CORS errors or other API issues, fall back to basic verification
-        if (response.status === 0 || response.status === 400) {
-          console.log('CORS or API error detected, using fallback verification');
-          return this.fallbackVerification(solverResult);
-        }
-        
-        throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.warn(`Anthropic API error (${response.status}): ${response.statusText} - ${errorData.error}`);
+        return this.fallbackVerification(solverResult);
       }
 
       const data = await response.json();
-      let content = data.content[0].text.trim();
+      let content = data.content.trim();
       
       // Handle JSON markdown wrapper
       if (content.startsWith('```json')) {
@@ -159,19 +137,6 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
       
     } catch (error) {
       console.warn('Independent verification failed:', error);
-      
-      // Check if it's a CORS/network error
-      if (error instanceof Error && (
-        error.name === 'AbortError' ||
-        error.message.includes('CORS') ||
-        error.message.includes('Failed to fetch') ||
-        error.message.includes('NetworkError')
-      )) {
-        console.log('Network/CORS error detected, using fallback verification');
-        return this.fallbackVerification(solverResult);
-      }
-      
-      // For other errors, still provide a reasonable fallback
       return this.fallbackVerification(solverResult);
     }
   }

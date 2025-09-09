@@ -174,33 +174,27 @@ export class LLMClient {
     messages: Array<{ role: string; content: string }>,
     options: any
   ): Promise<{ content: string; usage?: any }> {
-    if (!this.config.anthropic_api_key) {
-      throw new Error('Anthropic API key not configured');
-    }
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Call our serverless function instead of Anthropic directly
+    const response = await fetch('/api/anthropic', {
       method: 'POST',
       headers: {
-        'x-api-key': this.config.anthropic_api_key,
         'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        messages: messages.filter(m => m.role !== 'system'),
-        system: messages.find(m => m.role === 'system')?.content,
+        messages,
         max_tokens: options.max_tokens || this.config.max_tokens,
         temperature: options.temperature || this.config.temperature,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Anthropic API error: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Anthropic API error: ${response.statusText} - ${errorData.error || 'Unknown error'}`);
     }
 
     const data = await response.json();
     return {
-      content: data.content[0].text,
+      content: data.content,
       usage: data.usage
     };
   }
@@ -209,24 +203,28 @@ export class LLMClient {
     prompt: string,
     options: any
   ): Promise<{ content: string; usage?: any }> {
-    if (!this.googleAI) {
-      throw new Error('Google API key not configured');
-    }
-
-    const model = this.googleAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp',
-      generationConfig: {
+    // Call our serverless function instead of Google directly
+    const response = await fetch('/api/google', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
         temperature: options.temperature || this.config.temperature,
         maxOutputTokens: options.max_tokens || this.config.max_tokens,
-      }
+      }),
     });
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Google API error: ${response.statusText} - ${errorData.error || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
     return {
-      content: response.text(),
-      usage: response.usageMetadata
+      content: data.content,
+      usage: data.usage
     };
   }
 

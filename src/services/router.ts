@@ -149,38 +149,28 @@ export class SATRouter {
   }
 
   private async extractWithGemini(imageBase64: string): Promise<{ text: string; choices: string[] }> {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${this.googleApiKey}`, {
+    // Call our serverless function instead of Google directly
+    const response = await fetch('/api/google', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            {
-              text: 'Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
-            },
-            {
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: imageBase64
-              }
-            }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 1000
-        }
+        prompt: `Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}
+
+Image data: data:image/jpeg;base64,${imageBase64}`,
+        temperature: 0.1,
+        maxOutputTokens: 1000
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini Vision API error: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Google API error: ${response.statusText} - ${errorData.error || 'Unknown error'}`);
     }
 
     const data = await response.json();
-    const content = data.candidates[0].content.parts[0].text;
+    const content = data.content;
     
     try {
       const parsed = JSON.parse(content);
