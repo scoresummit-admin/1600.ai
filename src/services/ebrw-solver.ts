@@ -206,7 +206,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     if (jsonContent.startsWith('```json')) {
       jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
     } else if (jsonContent.startsWith('```')) {
-      jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?``\`$/, '');
+      jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
     }
     
     const result = JSON.parse(jsonContent);
