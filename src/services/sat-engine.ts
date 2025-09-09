@@ -124,7 +124,7 @@ export class SATEngine {
       // Primary solve with GPT-5
       const primarySolution = await this.ebrwSolver.solve(
         routerOutput.prompt_text,
-        routerOutput.choices,
+        choices, // Use original choices with full text, not just letters
         routerOutput.subdomain,
         Math.min(remainingTime * 0.6, 15000)
       );
@@ -135,7 +135,7 @@ export class SATEngine {
       const primaryVerification = await this.verifier.verifyEBRW(
         primarySolution,
         routerOutput.prompt_text,
-        routerOutput.choices
+        choices // Use original choices with full text
       );
       verificationResults.push(primaryVerification);
       
@@ -145,7 +145,7 @@ export class SATEngine {
           // Use Claude for cross-check
           const crossCheckSolution = await this.ebrwSolver.solveCrossCheck(
             routerOutput.prompt_text,
-            routerOutput.choices,
+            choices, // Use original choices with full text
             routerOutput.subdomain,
             Math.min(remainingTime * 0.3, 10000)
           );
@@ -155,7 +155,7 @@ export class SATEngine {
           const crossVerification = await this.verifier.verifyEBRW(
             crossCheckSolution,
             routerOutput.prompt_text,
-            routerOutput.choices
+            choices // Use original choices with full text
           );
           verificationResults.push(crossVerification);
         } catch (error) {
@@ -168,7 +168,7 @@ export class SATEngine {
         try {
           const geminiSolution = await this.ebrwSolver.solveWithGemini(
             routerOutput.prompt_text,
-            routerOutput.choices,
+            choices, // Use original choices with full text
             routerOutput.subdomain,
             8000
           );
@@ -178,7 +178,7 @@ export class SATEngine {
           const geminiVerification = await this.verifier.verifyEBRW(
             geminiSolution,
             routerOutput.prompt_text,
-            routerOutput.choices
+            choices // Use original choices with full text
           );
           verificationResults.push(geminiVerification);
         } catch (error) {

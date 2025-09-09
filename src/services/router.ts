@@ -51,7 +51,15 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
         timeout_ms: 5000
       });
 
-      const result = JSON.parse(response.content);
+      // Handle both wrapped and unwrapped JSON responses
+      let jsonContent = response.content.trim();
+      if (jsonContent.startsWith('```json')) {
+        jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
+      } else if (jsonContent.startsWith('```')) {
+        jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
+      }
+      
+      const result = JSON.parse(jsonContent);
       
       // Validate and set defaults
       const routerOutput: RouterOutput = {

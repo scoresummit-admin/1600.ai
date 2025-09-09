@@ -93,7 +93,15 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       timeout_ms: timeoutMs
     });
 
-    const result = JSON.parse(response.content);
+    // Handle both wrapped and unwrapped JSON responses
+    let jsonContent = response.content.trim();
+    if (jsonContent.startsWith('```json')) {
+      jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (jsonContent.startsWith('```')) {
+      jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    const result = JSON.parse(jsonContent);
     
     return {
       final_choice: result.final_choice,
@@ -139,7 +147,15 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       timeout_ms: timeoutMs
     });
 
-    const result = JSON.parse(response.content);
+    // Handle both wrapped and unwrapped JSON responses
+    let jsonContent = response.content.trim();
+    if (jsonContent.startsWith('```json')) {
+      jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (jsonContent.startsWith('```')) {
+      jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    const result = JSON.parse(jsonContent);
     
     return {
       final_choice: result.final_choice,
@@ -185,7 +201,15 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       timeout_ms: timeoutMs
     });
 
-    const result = JSON.parse(response.content);
+    // Handle both wrapped and unwrapped JSON responses
+    let jsonContent = response.content.trim();
+    if (jsonContent.startsWith('```json')) {
+      jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (jsonContent.startsWith('```')) {
+      jsonContent = jsonContent.replace /```\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    const result = JSON.parse(jsonContent);
     
     return {
       final_choice: result.final_choice,
