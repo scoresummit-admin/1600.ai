@@ -1,4 +1,4 @@
-import { ModelConfig, ModelName } from '../types/sat';
+import { ModelConfig, ModelName } from '../../types/sat';
 
 export class LLMClient {
   private config: ModelConfig;
