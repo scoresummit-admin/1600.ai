@@ -71,13 +71,13 @@ export class MathSolver {
     }
   }
 
-  private async solvePrimary(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+  private async solvePrimary(item: RoutedItem, timeoutMs = 14000): Promise<SolverResult> {
     const userPrompt = `Domain: ${item.subdomain}
 ${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
 
 Question: ${item.normalizedPrompt}
 
-${!item.isGridIn ? `Choices:\n${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` : ''}`;
+${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` : ''}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

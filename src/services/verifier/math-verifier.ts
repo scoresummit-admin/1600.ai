@@ -106,8 +106,6 @@ export class MathVerifier {
   }
 
   private verifyDomain(answer: string, prompt: string): { valid: boolean; notes: string[] } {
-    const notes: string[] = [];
-    
     // Check for common domain violations
     if (!isNaN(Number(answer))) {
       const numAnswer = Number(answer);
@@ -156,6 +154,7 @@ export class MathVerifier {
 
   private async verifySubstitution(item: RoutedItem, answer: string): Promise<{ valid: boolean; notes: string[] }> {
     // Generate verification code to substitute the answer back
+    console.log('Verifying substitution for item:', item.id);
     const verificationCode = `
 # Verify answer by substitution
 answer = ${answer}

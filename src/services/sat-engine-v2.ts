@@ -4,7 +4,7 @@ import { MathSolver } from './math-solver';
 import { EBRWVerifier } from './verifier/ebrw-verifier';
 import { MathVerifier } from './verifier/math-verifier';
 import { SATAggregator } from './core/aggregate';
-import { SatItem, AggregatedAnswer, PerformanceMetrics } from '../types/sat';
+import { SatItem, AggregatedAnswer, PerformanceMetrics } from '../../types/sat';
 
 export class SATEngine {
   private router: SATRouter;
@@ -191,7 +191,7 @@ export class SATEngine {
     this.metrics.p95_latency_ms = sortedLatencies[p95Index] || 0;
     
     // Update escalation rate
-    const escalated = answer.modelVotes.some(vote => vote.meta?.escalated);
+    const escalated = answer.modelVotes.some((vote: any) => vote.meta?.escalated);
     if (escalated) {
       this.metrics.escalation_rate = (this.metrics.escalation_rate * (this.metrics.total_questions - 1) + 1) / this.metrics.total_questions;
     }

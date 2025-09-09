@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
-import { Brain, Target, Clock, TrendingUp, Zap } from 'lucide-react';
+import { useState } from 'react';
+import { Target, Clock, TrendingUp, Zap } from 'lucide-react';
 import { QuestionInput } from './components/QuestionInput';
 import { SolutionDisplay } from './components/SolutionDisplay';
 import { SATEngine } from './services/sat-engine-v2';
-import { AggregatedAnswer, PerformanceMetrics } from './types/sat';
+import { AggregatedAnswer, PerformanceMetrics } from '../types/sat';
 
 function App() {
   const [solution, setSolution] = useState<AggregatedAnswer | null>(null);
@@ -15,9 +15,8 @@ function App() {
 
   const handleQuestionSubmit = async (question: string, choices: string[], correctAnswer?: string) => {
     // Check for required API keys
-    const hasOpenAI = !!(process.env.OPENAI_API_KEY || import.meta.env.VITE_OPENAI_API_KEY);
-    const hasAnthropic = !!(process.env.ANTHROPIC_API_KEY || import.meta.env.VITE_ANTHROPIC_API_KEY);
-    const hasGoogle = !!(process.env.GOOGLE_API_KEY || import.meta.env.VITE_GOOGLE_API_KEY);
+    const hasOpenAI = !!(import.meta.env.VITE_OPENAI_API_KEY);
+    const hasAnthropic = !!(import.meta.env.VITE_ANTHROPIC_API_KEY);
     
     if (!hasOpenAI || !hasAnthropic) {
       alert('Missing required API keys. Please set OPENAI_API_KEY and ANTHROPIC_API_KEY in your environment.');

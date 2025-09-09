@@ -17,9 +17,9 @@ export class SATEngine {
 
   constructor(config: ModelConfig) {
     this.llmClient = new LLMClient(config);
-    this.router = new SATRouter(this.llmClient);
-    this.ebrwSolver = new EBRWSolver(this.llmClient);
-    this.mathSolver = new MathSolver(this.llmClient);
+    this.router = new SATRouter();
+    this.ebrwSolver = new EBRWSolver();
+    this.mathSolver = new MathSolver();
     this.verifier = new SATVerifier(this.llmClient);
     this.aggregator = new SATAggregator(this.llmClient);
     
@@ -53,7 +53,14 @@ export class SATEngine {
       console.log('🚀 Starting SAT question solving pipeline...');
       
       // Step 1: Route the question (1-2s budget)
-      const routerOutput = await this.router.routeQuestion(questionText, choices);
+      const satItem: SatItem = {
+        id: `q_${Date.now()}`,
+        source: 'text',
+        promptText: questionText,
+        choices: choices.length > 0 ? choices : undefined,
+        isGridIn: choices.length === 0
+      };
+      const routerOutput = await this.router.routeItem(satItem);
       const routeTime = Date.now() - startTime;
       console.log(`📍 Routed as ${routerOutput.section}/${routerOutput.subdomain} in ${routeTime}ms`);
       
@@ -123,12 +130,7 @@ export class SATEngine {
     
     try {
       // Primary solve with GPT-5
-      const primarySolution = await this.ebrwSolver.solve(
-        routerOutput.prompt_text,
-        choices, // Use original choices with full text, not just letters
-        routerOutput.subdomain,
-        Math.min(remainingTime * 0.6, 15000)
-      );
+      const primarySolution = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.6, 15000));
       solutions.push(primarySolution);
       this.metrics.model_usage['gpt-5']++;
       
@@ -143,20 +145,15 @@ export class SATEngine {
       // Cross-check with Claude if needed
       if (primarySolution.confidence_0_1 < 0.85 || !primaryVerification.passed) {
         try {
-          // Use Claude for cross-check
-          const crossCheckSolution = await this.ebrwSolver.solveCrossCheck(
-            routerOutput.prompt_text,
-            choices, // Use original choices with full text
-            routerOutput.subdomain,
-            Math.min(remainingTime * 0.3, 10000)
-          );
+          // Use escalation for cross-check
+          const crossCheckSolution = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.3, 10000));
           solutions.push(crossCheckSolution);
           this.metrics.model_usage['claude-3.5-sonnet']++;
           
           const crossVerification = await this.verifier.verifyEBRW(
             crossCheckSolution,
-            routerOutput.prompt_text,
-            choices // Use original choices with full text
+            routerOutput.normalizedPrompt,
+            routerOutput.choices
           );
           verificationResults.push(crossVerification);
         } catch (error) {
@@ -167,19 +164,14 @@ export class SATEngine {
       // Additional Google Gemini check for complex cases
       if (solutions.length > 1 && solutions[0].confidence_0_1 < 0.8) {
         try {
-          const geminiSolution = await this.ebrwSolver.solveWithGemini(
-            routerOutput.prompt_text,
-            choices, // Use original choices with full text
-            routerOutput.subdomain,
-            8000
-          );
+          const geminiSolution = await this.ebrwSolver.solve(routerOutput, 8000);
           solutions.push(geminiSolution);
           this.metrics.model_usage['gemini-2.5-pro']++;
           
           const geminiVerification = await this.verifier.verifyEBRW(
             geminiSolution,
-            routerOutput.prompt_text,
-            choices // Use original choices with full text
+            routerOutput.normalizedPrompt,
+            routerOutput.choices
           );
           verificationResults.push(geminiVerification);
         } catch (error) {
@@ -243,13 +235,7 @@ export class SATEngine {
     
     try {
       // Primary solve with o4-mini
-      const primarySolution = await this.mathSolver.solve(
-        routerOutput.prompt_text,
-        routerOutput.choices,
-        routerOutput.subdomain,
-        routerOutput.is_gridin,
-        Math.min(remainingTime * 0.7, 18000)
-      );
+      const primarySolution = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.7, 18000));
       solutions.push(primarySolution);
       this.metrics.model_usage['o4-mini']++;
       
@@ -264,19 +250,13 @@ export class SATEngine {
       // Second opinion if confidence is low or verification failed
       if (primarySolution.confidence_0_1 < 0.9 || !primaryVerification.passed) {
         try {
-          const secondSolution = await this.mathSolver.solve(
-            routerOutput.prompt_text,
-            routerOutput.choices,
-            routerOutput.subdomain,
-            routerOutput.is_gridin,
-            Math.min(remainingTime * 0.25, 12000)
-          );
+          const secondSolution = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.25, 12000));
           solutions.push(secondSolution);
           this.metrics.model_usage['gpt-5-thinking']++;
           
           const secondVerification = await this.verifier.verifyMath(
             secondSolution,
-            routerOutput.prompt_text,
+            routerOutput.normalizedPrompt,
             routerOutput.choices
           );
           verificationResults.push(secondVerification);
@@ -288,19 +268,13 @@ export class SATEngine {
       // Google Gemini for additional mathematical verification
       if (solutions.length > 1 || primarySolution.confidence_0_1 < 0.85) {
         try {
-          const geminiSolution = await this.mathSolver.solveWithGemini(
-            routerOutput.prompt_text,
-            routerOutput.choices,
-            routerOutput.subdomain,
-            routerOutput.is_gridin,
-            8000
-          );
+          const geminiSolution = await this.mathSolver.solve(routerOutput, 8000);
           solutions.push(geminiSolution);
           this.metrics.model_usage['gemini-2.5-pro']++;
           
           const geminiVerification = await this.verifier.verifyMath(
             geminiSolution,
-            routerOutput.prompt_text,
+            routerOutput.normalizedPrompt,
             routerOutput.choices
           );
           verificationResults.push(geminiVerification);

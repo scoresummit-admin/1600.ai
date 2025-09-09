@@ -1,4 +1,4 @@
-import { RoutedItem, SolverResult, EbrwDomain } from '../types/sat';
+import { RoutedItem, SolverResult } from '../../types/sat';
 
 const SYSTEM_EBRW = `You are an expert SAT EBRW solver.
 
@@ -41,7 +41,7 @@ export class EBRWSolver {
     this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
   }
 
-  async solve(item: RoutedItem, timeoutMs: number = 12000): Promise<SolverResult> {
+  async solve(item: RoutedItem, timeoutMs = 12000): Promise<SolverResult> {
     const startTime = Date.now();
     
     try {
@@ -78,7 +78,7 @@ export class EBRWSolver {
 Question: ${item.normalizedPrompt}
 
 Choices:
-${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -127,7 +127,7 @@ ${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).j
     };
   }
 
-  private async solveEscalated(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+  private async solveEscalated(item: RoutedItem, timeoutMs = 10000): Promise<SolverResult> {
     const userPrompt = `Domain: ${item.subdomain}
 
 This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
@@ -135,7 +135,7 @@ This question requires deeper analysis. Previous attempt had low confidence or a
 Question: ${item.normalizedPrompt}
 
 Choices:
-${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -186,13 +186,13 @@ ${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).j
   private isAmbiguous(result: SolverResult): boolean {
     // Check if elimination notes suggest close competition between options
     const notes = result.meta.elimination_notes || {};
-    const noteValues = Object.values(notes) as string[];
+    const noteValues = Object.values(notes);
     
     // Look for indicators of ambiguity in elimination notes
     const ambiguityIndicators = ['close', 'similar', 'both', 'either', 'unclear', 'possible'];
-    return noteValues.some(note => 
+    return noteValues.some((note: any) => 
       ambiguityIndicators.some(indicator => 
-        note.toLowerCase().includes(indicator)
+        String(note).toLowerCase().includes(indicator)
       )
     );
   }

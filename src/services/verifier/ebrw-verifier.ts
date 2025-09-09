@@ -98,7 +98,7 @@ Return JSON:
 
     const userPrompt = `${item.normalizedPrompt}
 
-${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {

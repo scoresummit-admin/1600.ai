@@ -57,9 +57,10 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
             </p>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${getConfidenceColor(solution.confidence_0_1)}`}>
-            {getConfidenceIcon(solution.confidence_0_1)}
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${getConfidenceColor(solution.confidence)}`}>
+            {getConfidenceIcon(solution.confidence)}
             <span className="font-medium">
-              {(solution.confidence_0_1 * 100).toFixed(0)}% confident
+              {(solution.confidence * 100).toFixed(0)}% confident
             </span>
           </div>
         </div>

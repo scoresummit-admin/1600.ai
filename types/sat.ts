@@ -42,7 +42,7 @@ export interface VerifierReport {
 
 export interface AggregatedAnswer {
   answer: string;
-  confidence: number;
+  confidence: number;             // 0..1
   section: Section;
   subdomain: EbrwDomain | MathDomain;
   timeMs: number;
@@ -51,6 +51,9 @@ export interface AggregatedAnswer {
   shortExplanation: string;
   evidenceOrChecks: string[];     // up to 2 items
 }
+
+// Export all interfaces for external use
+export type { SatItem, RoutedItem, SolverResult, VerifierReport, AggregatedAnswer };
 
 // Legacy compatibility types (will be phased out)
 export type SATSection = Section;

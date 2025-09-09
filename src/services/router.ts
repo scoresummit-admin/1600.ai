@@ -1,4 +1,4 @@
-import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../types/sat';
+import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../../types/sat';
 
 const SYSTEM_ROUTER = `You are an expert SAT question classifier. Analyze the question and return ONLY valid JSON.
 
