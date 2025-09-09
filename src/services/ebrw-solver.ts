@@ -88,7 +88,6 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], {
-      reasoning_effort: 'low',
       temperature: 0.2,
       max_tokens: 800,
       timeout_ms: timeoutMs

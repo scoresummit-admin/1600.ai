@@ -106,20 +106,32 @@ export class LLMClient {
 
     const actualModel = modelMap[model as keyof typeof modelMap] || 'gpt-4o';
 
+    // Only o1 models support reasoning_effort
+    const isO1Model = actualModel.startsWith('o1-');
+    
+    const requestBody: any = {
+      model: actualModel,
+      messages,
+      temperature: isO1Model ? 1 : (options.temperature || this.config.temperature),
+      max_tokens: options.max_tokens || this.config.max_tokens,
+    };
+    
+    // Add reasoning_effort only for o1 models
+    if (isO1Model && options.reasoning_effort) {
+      requestBody.reasoning_effort = options.reasoning_effort;
+    }
+    
+    // Add tools only for non-o1 models
+    if (!isO1Model && options.tools) {
+      requestBody.tools = options.tools;
+    }
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.config.openai_api_key}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: actualModel,
-        messages,
-        temperature: options.temperature || this.config.temperature,
-        max_tokens: options.max_tokens || this.config.max_tokens,
-        tools: options.tools,
-        reasoning_effort: options.reasoning_effort,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
