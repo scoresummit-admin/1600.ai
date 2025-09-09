@@ -98,8 +98,8 @@ export class SATEngine {
       // Return fallback solution
       return {
         final_choice_or_value: 'A',
-        section: fallbackSection as any,
-        subdomain: fallbackSubdomain as any,
+        section: 'EBRW',
+        subdomain: 'information_ideas',
         confidence_0_1: 0.1,
         time_ms: Date.now() - startTime,
         model_votes: [],
@@ -257,8 +257,8 @@ export class SATEngine {
     console.log('🔢 Solving Math question...', routerOutput.section, routerOutput.subdomain);
     
     // Validate this is actually a Math question
-    if (routerOutput.section !== 'Math') {
-      console.error('❌ Math solver called with non-Math question:', routerOutput.section);
+    if (routerOutput.section !== 'MATH') {
+      console.error('❌ Math solver called with non-MATH question:', routerOutput.section);
       throw new Error(`Math solver called with ${routerOutput.section} question`);
     }
     
@@ -350,7 +350,7 @@ export class SATEngine {
       // Return fallback solution instead of throwing
       return {
         final_choice_or_value: 'A',
-        section: 'Math',
+        section: 'MATH',
         subdomain: routerOutput.subdomain,
         confidence_0_1: 0.3,
         time_ms: Date.now() - startTime,
@@ -371,7 +371,7 @@ export class SATEngine {
     const solution = await this.aggregator.aggregateMath(
       solutions,
       verificationResults,
-      'Math',
+      'MATH',
       routerOutput.subdomain,
       totalTime
     );
