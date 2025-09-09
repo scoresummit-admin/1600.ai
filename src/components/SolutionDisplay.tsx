@@ -56,7 +56,6 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
               {solution.section} • {solution.subdomain.replace('_', ' ')}
             </p>
           </div>
-          <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${getConfidenceColor(solution.confidence_0_1)}`}>
           <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${getConfidenceColor(solution.confidence)}`}>
             {getConfidenceIcon(solution.confidence)}
             <span className="font-medium">
