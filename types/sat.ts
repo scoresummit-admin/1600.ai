@@ -52,9 +52,6 @@ export interface AggregatedAnswer {
   evidenceOrChecks: string[];     // up to 2 items
 }
 
-// Export all interfaces for external use
-export type { SatItem, RoutedItem, SolverResult, VerifierReport, AggregatedAnswer };
-
 // Legacy compatibility types (will be phased out)
 export type SATSection = Section;
 export type EBRWDomain = EbrwDomain;
