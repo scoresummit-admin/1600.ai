@@ -68,7 +68,7 @@ export class SATRouter {
         section: classification.section,
         subdomain: classification.subdomain,
         normalizedPrompt: classification.normalizedPrompt || this.cleanText(promptText),
-        choices: classification.choices.length > 0 ? classification.choices : choices,
+        normalizedPrompt: result.normalizedPrompt || promptText,
         isGridIn: item.isGridIn || choices.length === 0,
         hasFigure: hasFigure || classification.hasFigure
       };
@@ -268,7 +268,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     return {
       section: 'EBRW',
       subdomain: 'information_ideas' as EbrwDomain,
-      normalizedPrompt: this.cleanText(item.promptText || ''),
+      normalizedPrompt: item.promptText || '',
       choices,
       isGridIn: false,
       hasFigure: false
