@@ -67,7 +67,7 @@ export class SATRouter {
       const routedItem: RoutedItem = {
         section: classification.section,
         subdomain: classification.subdomain,
-        normalizedPrompt: classification.normalizedPrompt || promptText,
+        normalizedPrompt: classification.normalizedPrompt || promptText, // Ensure we always have the full text
         choices: classification.choices || choices,
         isGridIn: item.isGridIn || choices.length === 0,
         hasFigure: hasFigure || classification.hasFigure
@@ -229,7 +229,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     return {
       section: result.section,
       subdomain: result.subdomain,
-      normalizedPrompt: result.normalizedPrompt,
+      normalizedPrompt: result.normalizedPrompt || promptText, // Fallback to original if not provided
       choices: result.choices || choices,
       hasFigure: result.hasFigure || false
     };
