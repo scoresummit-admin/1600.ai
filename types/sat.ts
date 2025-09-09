@@ -53,7 +53,7 @@ export interface AggregatedAnswer {
 }
 
 // Export all interfaces for external use
-export { SatItem, RoutedItem, SolverResult, VerifierReport, AggregatedAnswer };
+export type { SatItem, RoutedItem, SolverResult, VerifierReport, AggregatedAnswer };
 
 // Legacy compatibility types (will be phased out)
 export type SATSection = Section;

@@ -154,7 +154,7 @@ export class MathVerifier {
 
   private async verifySubstitution(item: RoutedItem, answer: string): Promise<{ valid: boolean; notes: string[] }> {
     // Generate verification code to substitute the answer back
-    console.log('Verifying substitution for item:', item.id);
+    console.log('Verifying substitution for item:', item.normalizedPrompt.substring(0, 50));
     const verificationCode = `
 # Verify answer by substitution
 answer = ${answer}

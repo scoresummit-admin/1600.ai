@@ -4,7 +4,8 @@ import { EBRWSolver } from './ebrw-solver';
 import { MathSolver } from './math-solver';
 import { SATVerifier } from './verifier';
 import { SATAggregator } from './aggregator';
-import { SATSolution, ModelConfig, PerformanceMetrics, EBRWDomain, MathDomain, SatItem } from '../types/sat';
+import { SATSolution, ModelConfig, PerformanceMetrics, EBRWDomain, MathDomain } from '../types/sat';
+import type { SatItem } from '../types/sat';
 
 export class SATEngine {
   private llmClient: LLMClient;
@@ -266,7 +267,17 @@ export class SATEngine {
     
     try {
       // Primary solve with o4-mini
-      const primarySolution = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.7, 18000));
+      const primaryResult = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.7, 18000));
+      
+      // Convert SolverResult to MathSolution
+      const primarySolution = {
+        answer_value_or_choice: primaryResult.final,
+        confidence_0_1: primaryResult.confidence,
+        method: primaryResult.meta.method || 'hybrid',
+        checks: primaryResult.meta.checks || [],
+        short_explanation: primaryResult.meta.explanation || 'Solution computed',
+        model: primaryResult.model as any
+      };
       solutions.push(primarySolution);
       this.metrics.model_usage['o4-mini']++;
       
@@ -281,13 +292,23 @@ export class SATEngine {
       // Second opinion if confidence is low or verification failed
       if (primarySolution.confidence_0_1 < 0.9 || !primaryVerification.passed) {
         try {
-          const secondSolution = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.25, 12000));
+          const secondResult = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.25, 12000));
+          
+          // Convert SolverResult to MathSolution
+          const secondSolution = {
+            answer_value_or_choice: secondResult.final,
+            confidence_0_1: secondResult.confidence,
+            method: secondResult.meta.method || 'hybrid',
+            checks: secondResult.meta.checks || [],
+            short_explanation: secondResult.meta.explanation || 'Second opinion',
+            model: secondResult.model as any
+          };
           solutions.push(secondSolution);
           this.metrics.model_usage['gpt-5-thinking']++;
           
           const secondVerification = await this.verifier.verifyMath(
             secondSolution,
-            routerOutput.normalizedPrompt,
+            routerOutput.prompt_text,
             routerOutput.choices
           );
           verificationResults.push(secondVerification);
@@ -299,13 +320,23 @@ export class SATEngine {
       // Google Gemini for additional mathematical verification
       if (solutions.length > 1 || primarySolution.confidence_0_1 < 0.85) {
         try {
-          const geminiSolution = await this.mathSolver.solve(routerOutput, 8000);
+          const geminiResult = await this.mathSolver.solve(routerOutput, 8000);
+          
+          // Convert SolverResult to MathSolution
+          const geminiSolution = {
+            answer_value_or_choice: geminiResult.final,
+            confidence_0_1: geminiResult.confidence,
+            method: geminiResult.meta.method || 'hybrid',
+            checks: geminiResult.meta.checks || [],
+            short_explanation: geminiResult.meta.explanation || 'Gemini verification',
+            model: geminiResult.model as any
+          };
           solutions.push(geminiSolution);
           this.metrics.model_usage['gemini-2.5-pro']++;
           
           const geminiVerification = await this.verifier.verifyMath(
             geminiSolution,
-            routerOutput.normalizedPrompt,
+            routerOutput.prompt_text,
             routerOutput.choices
           );
           verificationResults.push(geminiVerification);
