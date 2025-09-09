@@ -129,12 +129,18 @@ export class LLMClient {
       model: actualModel,
       messages: processedMessages,
       temperature: isO1Model ? 1 : (options.temperature || this.config.temperature),
-      max_tokens: options.max_tokens || this.config.max_tokens,
     };
     
     // Add reasoning_effort only for o1 models
     if (isO1Model && options.reasoning_effort) {
       requestBody.reasoning_effort = options.reasoning_effort;
+    }
+    
+    // o1 models use max_completion_tokens instead of max_tokens
+    if (isO1Model) {
+      requestBody.max_completion_tokens = options.max_tokens || this.config.max_tokens;
+    } else {
+      requestBody.max_tokens = options.max_tokens || this.config.max_tokens;
     }
     
     // Add tools only for non-o1 models
