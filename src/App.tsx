@@ -16,11 +16,16 @@ function App() {
   const handleQuestionSubmit = async (question: string, choices: string[], correctAnswer?: string) => {
     // Check for required API keys
     const hasOpenAI = !!(import.meta.env.VITE_OPENAI_API_KEY);
-    const hasAnthropic = !!(import.meta.env.VITE_ANTHROPIC_API_KEY);
     
-    if (!hasOpenAI || !hasAnthropic) {
-      alert('Missing required API keys. Please set OPENAI_API_KEY and ANTHROPIC_API_KEY in your environment.');
+    if (!hasOpenAI) {
+      alert('Missing required API key. Please set OPENAI_API_KEY in your environment.');
       return;
+    }
+    
+    // Warn about missing Anthropic key but don't block execution
+    const hasAnthropic = !!(import.meta.env.VITE_ANTHROPIC_API_KEY);
+    if (!hasAnthropic) {
+      console.warn('Anthropic API key not found. Verification will use fallback method.');
     }
 
     setIsLoading(true);
