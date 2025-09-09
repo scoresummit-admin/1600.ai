@@ -109,9 +109,25 @@ export class LLMClient {
     // Only o1 models support reasoning_effort
     const isO1Model = actualModel.startsWith('o1-');
     
+    // o1 models don't support system messages - combine system and user messages
+    let processedMessages = messages;
+    if (isO1Model) {
+      const systemMessage = messages.find(m => m.role === 'system');
+      const userMessage = messages.find(m => m.role === 'user');
+      
+      if (systemMessage && userMessage) {
+        processedMessages = [{
+          role: 'user',
+          content: `${systemMessage.content}\n\n${userMessage.content}`
+        }];
+      } else {
+        processedMessages = messages.filter(m => m.role !== 'system');
+      }
+    }
+    
     const requestBody: any = {
       model: actualModel,
-      messages,
+      messages: processedMessages,
       temperature: isO1Model ? 1 : (options.temperature || this.config.temperature),
       max_tokens: options.max_tokens || this.config.max_tokens,
     };
