@@ -66,20 +66,32 @@ export class SATEngine {
       // Step 2: Solve based on section
       if (routerOutput.section === 'EBRW') {
         const ebrwDomain = routerOutput.subdomain as EBRWDomain;
-        return await this.solveEBRW({...routerOutput, subdomain: ebrwDomain}, startTime, remainingTime, correctAnswer);
+        const ebrwRouterOutput = {
+          ...routerOutput,
+          subdomain: ebrwDomain
+        };
+        return await this.solveEBRW(ebrwRouterOutput, startTime, remainingTime, correctAnswer);
       } else {
         const mathDomain = routerOutput.subdomain as MathDomain;
-        return await this.solveMath({...routerOutput, subdomain: mathDomain}, startTime, remainingTime, correctAnswer);
+        const mathRouterOutput = {
+          ...routerOutput,
+          subdomain: mathDomain
+        };
+        return await this.solveMath(mathRouterOutput, startTime, remainingTime, correctAnswer);
       }
       
     } catch (error) {
       console.error('❌ SAT Engine error:', error);
       
+      // Determine section for fallback
+      const fallbackSection = routerOutput?.section || 'EBRW';
+      const fallbackSubdomain = fallbackSection === 'EBRW' ? 'information_ideas' : 'algebra';
+      
       // Return fallback solution
       return {
         final_choice_or_value: 'A',
-        section: 'EBRW',
-        subdomain: 'information_ideas',
+        section: fallbackSection as any,
+        subdomain: fallbackSubdomain as any,
         confidence_0_1: 0.1,
         time_ms: Date.now() - startTime,
         model_votes: [],
@@ -97,7 +109,13 @@ export class SATEngine {
     remainingTime: number,
     correctAnswer?: string
   ): Promise<SATSolution> {
-    console.log('📚 Solving EBRW question...');
+    console.log('📚 Solving EBRW question...', routerOutput.section, routerOutput.subdomain);
+    
+    // Validate this is actually an EBRW question
+    if (routerOutput.section !== 'EBRW') {
+      console.error('❌ EBRW solver called with non-EBRW question:', routerOutput.section);
+      throw new Error(`EBRW solver called with ${routerOutput.section} question`);
+    }
     
     const solutions = [];
     const verificationResults = [];
@@ -211,7 +229,13 @@ export class SATEngine {
     remainingTime: number,
     correctAnswer?: string
   ): Promise<SATSolution> {
-    console.log('🔢 Solving Math question...');
+    console.log('🔢 Solving Math question...', routerOutput.section, routerOutput.subdomain);
+    
+    // Validate this is actually a Math question
+    if (routerOutput.section !== 'Math') {
+      console.error('❌ Math solver called with non-Math question:', routerOutput.section);
+      throw new Error(`Math solver called with ${routerOutput.section} question`);
+    }
     
     const solutions = [];
     const verificationResults = [];
