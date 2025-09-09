@@ -4,7 +4,7 @@ import { EBRWSolver } from './ebrw-solver';
 import { MathSolver } from './math-solver';
 import { SATVerifier } from './verifier';
 import { SATAggregator } from './aggregator';
-import { SATSolution, ModelConfig, PerformanceMetrics } from '../types/sat';
+import { SATSolution, ModelConfig, PerformanceMetrics, EBRWDomain, MathDomain } from '../types/sat';
 
 export class SATEngine {
   private llmClient: LLMClient;
