@@ -70,14 +70,14 @@ export class SATEngine {
           ...routerOutput,
           subdomain: ebrwDomain
         };
-        return await this.solveEBRW(ebrwRouterOutput, startTime, remainingTime, correctAnswer);
+        return await this.solveEBRW(ebrwRouterOutput, choices, startTime, remainingTime, correctAnswer);
       } else {
         const mathDomain = routerOutput.subdomain as MathDomain;
         const mathRouterOutput = {
           ...routerOutput,
           subdomain: mathDomain
         };
-        return await this.solveMath(mathRouterOutput, startTime, remainingTime, correctAnswer);
+        return await this.solveMath(mathRouterOutput, choices, startTime, remainingTime, correctAnswer);
       }
       
     } catch (error) {
@@ -105,6 +105,7 @@ export class SATEngine {
 
   private async solveEBRW(
     routerOutput: any,
+    choices: string[],
     startTime: number,
     remainingTime: number,
     correctAnswer?: string
@@ -225,6 +226,7 @@ export class SATEngine {
 
   private async solveMath(
     routerOutput: any,
+    choices: string[],
     startTime: number,
     remainingTime: number,
     correctAnswer?: string
