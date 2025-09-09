@@ -19,12 +19,11 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           ocr: ['tesseract.js'],
           ai: ['@google/generative-ai']
-              }
-          }
-      },
-  }
+        }
+      }
+    },
+  },
   server: {
     port: 3000,
     host: true
   }
-})
