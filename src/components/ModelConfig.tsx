@@ -22,9 +22,9 @@ export const ModelConfig: React.FC<ModelConfigProps> = ({
   React.useEffect(() => {
     setTempConfig({
       ...config,
-      openai_api_key: config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY || '',
-      anthropic_api_key: config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY || '',
-      google_api_key: config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY || '',
+      openai_api_key: config.openai_api_key || (import.meta.env.VITE_OPENAI_API_KEY || ''),
+      anthropic_api_key: config.anthropic_api_key || (import.meta.env.VITE_ANTHROPIC_API_KEY || ''),
+      google_api_key: config.google_api_key || (import.meta.env.VITE_GOOGLE_API_KEY || ''),
     });
   }, [config]);
 

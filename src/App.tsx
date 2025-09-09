@@ -13,9 +13,9 @@ function App() {
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   
   const [config, setConfig] = useState<ModelConfigType>({
-    openai_api_key: import.meta.env.VITE_OPENAI_API_KEY,
-    anthropic_api_key: import.meta.env.VITE_ANTHROPIC_API_KEY,
-    google_api_key: import.meta.env.VITE_GOOGLE_API_KEY,
+    openai_api_key: import.meta.env.VITE_OPENAI_API_KEY || '',
+    anthropic_api_key: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+    google_api_key: import.meta.env.VITE_GOOGLE_API_KEY || '',
     enabled_models: ['gpt-5', 'claude-3.5-sonnet', 'o4-mini'],
     reasoning_effort: 'low',
     max_tokens: 1000,
@@ -25,18 +25,18 @@ function App() {
   const [satEngine, setSatEngine] = useState<SATEngine | null>(null);
 
   const initializeEngine = useCallback(() => {
-    const hasOpenAI = config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY;
-    const hasAnthropic = config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY;
-    const hasGoogle = config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY;
+    const hasOpenAI = config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY || '';
+    const hasAnthropic = config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY || '';
+    const hasGoogle = config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY || '';
     
     if (hasOpenAI || hasAnthropic || hasGoogle) {
-      const finalConfig = {
+      const finalConfig: ModelConfigType = {
         ...config,
-        openai_api_key: config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY,
-        anthropic_api_key: config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY,
-        google_api_key: config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY,
+        openai_api_key: config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY || '',
+        anthropic_api_key: config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+        google_api_key: config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY || '',
       };
-      const engine = new SATEngine(config);
+      const engine = new SATEngine(finalConfig);
       setSatEngine(engine);
       return engine;
     }
@@ -56,9 +56,9 @@ function App() {
     const engine = satEngine || initializeEngine();
     if (!engine) {
       console.log('Environment variables:', {
-        openai: import.meta.env.VITE_OPENAI_API_KEY ? 'Present' : 'Missing',
-        anthropic: import.meta.env.VITE_ANTHROPIC_API_KEY ? 'Present' : 'Missing',
-        google: import.meta.env.VITE_GOOGLE_API_KEY ? 'Present' : 'Missing'
+        openai: (import.meta.env.VITE_OPENAI_API_KEY || '') ? 'Present' : 'Missing',
+        anthropic: (import.meta.env.VITE_ANTHROPIC_API_KEY || '') ? 'Present' : 'Missing',
+        google: (import.meta.env.VITE_GOOGLE_API_KEY || '') ? 'Present' : 'Missing'
       });
       alert('Please configure at least one API key. Check the console for environment variable status.');
       setShowConfig(true);
@@ -81,8 +81,8 @@ function App() {
   };
 
   const hasValidConfig = 
-    config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY ||
-    config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY ||
+    config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY || 
+    config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY || 
     config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY;
 
   return (
