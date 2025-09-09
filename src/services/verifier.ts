@@ -1,14 +1,14 @@
 import { LLMClient } from './llm-client';
-import { EBRWSolution, MathSolution, VerificationResult } from '../types/sat';
+import { EBRWSolutionLegacy, MathSolutionLegacy, VerificationResultLegacy } from '../../types/sat';
 
 export class SATVerifier {
   constructor(private llmClient: LLMClient) {}
 
   async verifyEBRW(
-    solution: EBRWSolution,
+    solution: EBRWSolutionLegacy,
     originalPrompt: string,
     choices: string[]
-  ): Promise<VerificationResult> {
+  ): Promise<VerificationResultLegacy> {
     const startTime = Date.now();
     
     try {
@@ -45,10 +45,10 @@ export class SATVerifier {
   }
 
   async verifyMath(
-    solution: MathSolution,
+    solution: MathSolutionLegacy,
     originalPrompt: string,
     choices: string[]
-  ): Promise<VerificationResult> {
+  ): Promise<VerificationResultLegacy> {
     const startTime = Date.now();
     
     try {
@@ -178,7 +178,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     }
   }
 
-  private verifyDomain(solution: MathSolution, prompt: string): { valid: boolean; notes: string[] } {
+  private verifyDomain(solution: MathSolutionLegacy, prompt: string): { valid: boolean; notes: string[] } {
     // Basic domain validation
     const answer = solution.answer_value_or_choice;
     
@@ -204,7 +204,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     return { valid: true, notes: ['✓ Domain check passed'] };
   }
 
-  private verifyUnits(solution: MathSolution, prompt: string): { valid: boolean; notes: string[] } {
+  private verifyUnits(solution: MathSolutionLegacy, prompt: string): { valid: boolean; notes: string[] } {
     // Basic unit consistency check
     const hasUnits = /\b(meters?|feet|inches?|seconds?|minutes?|hours?|dollars?|cents?)\b/i.test(prompt);
     
@@ -215,7 +215,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     return { valid: true, notes: ['✓ No unit issues detected'] };
   }
 
-  private async verifySubstitution(solution: MathSolution, prompt: string): Promise<{ valid: boolean; notes: string[] }> {
+  private async verifySubstitution(solution: MathSolutionLegacy, prompt: string): Promise<{ valid: boolean; notes: string[] }> {
     // For now, assume substitution is valid if it was checked
     console.log('Verifying substitution for:', prompt.substring(0, 50));
     if (solution.checks.includes('substitute_back')) {

@@ -4,8 +4,8 @@ import { EBRWSolver } from './ebrw-solver';
 import { MathSolver } from './math-solver';
 import { SATVerifier } from './verifier';
 import { SATAggregator } from './aggregator';
-import { SATSolution, ModelConfig, PerformanceMetrics, EBRWDomain, MathDomain } from '../types/sat';
-import type { SatItem } from '../types/sat';
+import { SATSolutionLegacy, ModelConfig, PerformanceMetrics, EBRWDomain, MathDomain } from '../../types/sat';
+import type { SatItem } from '../../types/sat';
 
 export class SATEngine {
   private llmClient: LLMClient;
@@ -46,7 +46,7 @@ export class SATEngine {
     questionText: string, 
     choices: string[],
     correctAnswer?: string
-  ): Promise<SATSolution> {
+  ): Promise<SATSolutionLegacy> {
     const startTime = Date.now();
     const maxTimeMs = 30000; // Hard 30s limit
     
@@ -117,7 +117,7 @@ export class SATEngine {
     startTime: number,
     remainingTime: number,
     correctAnswer?: string
-  ): Promise<SATSolution> {
+  ): Promise<SATSolutionLegacy> {
     console.log('📚 Solving EBRW question...', routerOutput.section, routerOutput.subdomain);
     
     // Validate this is actually an EBRW question
@@ -253,7 +253,7 @@ export class SATEngine {
     startTime: number,
     remainingTime: number,
     correctAnswer?: string
-  ): Promise<SATSolution> {
+  ): Promise<SATSolutionLegacy> {
     console.log('🔢 Solving Math question...', routerOutput.section, routerOutput.subdomain);
     
     // Validate this is actually a Math question
@@ -382,7 +382,7 @@ export class SATEngine {
     return solution;
   }
 
-  private updateMetrics(solution: SATSolution, correctAnswer?: string, timeMs?: number) {
+  private updateMetrics(solution: SATSolutionLegacy, correctAnswer?: string, timeMs?: number) {
     this.metrics.total_questions++;
     
     if (correctAnswer && solution.final_choice_or_value === correctAnswer) {

@@ -1,17 +1,17 @@
 import { LLMClient } from './llm-client';
-import { EBRWSolution, MathSolution, ModelVote, VerificationResult, SATSolution, SATSection, EBRWDomain, MathDomain } from '../types/sat';
+import { EBRWSolutionLegacy, MathSolutionLegacy, ModelVoteLegacy, VerificationResultLegacy, SATSolutionLegacy, SATSection, EBRWDomain, MathDomain } from '../../types/sat';
 
 export class SATAggregator {
   constructor(private llmClient: LLMClient) {}
 
   async aggregateEBRW(
-    solutions: EBRWSolution[],
-    verificationResults: VerificationResult[],
+    solutions: EBRWSolutionLegacy[],
+    verificationResults: VerificationResultLegacy[],
     section: SATSection,
     subdomain: EBRWDomain,
     totalTimeMs: number
-  ): Promise<SATSolution> {
-    const modelVotes: ModelVote[] = solutions.map((sol, i) => ({
+  ): Promise<SATSolutionLegacy> {
+    const modelVotes: ModelVoteLegacy[] = solutions.map((sol, i) => ({
       model: sol.model,
       choice_or_value: sol.final_choice,
       confidence: sol.confidence_0_1 + (verificationResults[i]?.confidence_adjustment || 0),
@@ -21,8 +21,8 @@ export class SATAggregator {
     // Weighted voting with verification priority
     const verifiedSolutions = solutions.filter((_, i) => verificationResults[i]?.passed);
     
-    let finalSolution: EBRWSolution;
-    let finalVerification: VerificationResult;
+    let finalSolution: EBRWSolutionLegacy;
+    let finalVerification: VerificationResultLegacy;
     
     if (verifiedSolutions.length > 0) {
       // Use highest confidence verified solution
@@ -70,13 +70,13 @@ export class SATAggregator {
   }
 
   async aggregateMath(
-    solutions: MathSolution[],
-    verificationResults: VerificationResult[],
+    solutions: MathSolutionLegacy[],
+    verificationResults: VerificationResultLegacy[],
     section: SATSection,
     subdomain: MathDomain,
     totalTimeMs: number
-  ): Promise<SATSolution> {
-    const modelVotes: ModelVote[] = solutions.map((sol, i) => ({
+  ): Promise<SATSolutionLegacy> {
+    const modelVotes: ModelVoteLegacy[] = solutions.map((sol, i) => ({
       model: sol.model,
       choice_or_value: sol.answer_value_or_choice,
       confidence: sol.confidence_0_1 + (verificationResults[i]?.confidence_adjustment || 0),
@@ -86,8 +86,8 @@ export class SATAggregator {
     // Verified math results have highest priority
     const verifiedSolutions = solutions.filter((_, i) => verificationResults[i]?.passed);
     
-    let finalSolution: MathSolution;
-    let finalVerification: VerificationResult;
+    let finalSolution: MathSolutionLegacy;
+    let finalVerification: VerificationResultLegacy;
     
     if (verifiedSolutions.length > 0) {
       // Use first verified solution (they should all agree if verified)
@@ -136,7 +136,7 @@ export class SATAggregator {
     };
   }
 
-  private needsEscalation(votes: ModelVote[], verification: VerificationResult): boolean {
+  private needsEscalation(votes: ModelVoteLegacy[], verification: VerificationResultLegacy): boolean {
     // Escalate if:
     // 1. Verification failed
     // 2. Low confidence (< 0.7)
@@ -161,7 +161,7 @@ export class SATAggregator {
     return false;
   }
 
-  private findConsensus(solutions: MathSolution[]): string | null {
+  private findConsensus(solutions: MathSolutionLegacy[]): string | null {
     if (solutions.length < 2) return solutions[0]?.answer_value_or_choice || null;
     
     const answerCounts = new Map<string, number>();
@@ -186,9 +186,9 @@ export class SATAggregator {
     choices: string[],
     section: SATSection,
     subdomain: EBRWDomain | MathDomain,
-    previousSolutions: (EBRWSolution | MathSolution)[],
+    previousSolutions: (EBRWSolutionLegacy | MathSolutionLegacy)[],
     timeoutMs: number = 12000
-  ): Promise<EBRWSolution | MathSolution> {
+  ): Promise<EBRWSolutionLegacy | MathSolutionLegacy> {
     const solutionSummary = previousSolutions.map(sol => {
       if ('final_choice' in sol) {
         return `${sol.model}: ${sol.final_choice}`;
@@ -241,7 +241,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
         evidence: result.evidence || [],
         elimination_notes: result.elimination_notes || {},
         model: 'gpt-5-thinking'
-      } as EBRWSolution;
+      } as EBRWSolutionLegacy;
     } else {
       return {
         answer_value_or_choice: result.answer_value_or_choice,
@@ -250,7 +250,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
         checks: result.checks || ['substitute_back'],
         short_explanation: result.short_explanation,
         model: 'gpt-5-thinking'
-      } as MathSolution;
+      } as MathSolutionLegacy;
     }
   }
 }

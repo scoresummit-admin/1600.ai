@@ -58,7 +58,7 @@ export type EBRWDomain = EbrwDomain;
 export type MathDomainLegacy = MathDomain;
 export type ModelName = 'gpt-5' | 'gpt-5-thinking' | 'o4-mini' | 'claude-3.5-sonnet' | 'gemini-2.5-pro' | 'qwen2.5-math-72b';
 
-export interface SATQuestion {
+export interface SATQuestionLegacy {
   id: string;
   prompt_text: string;
   choices: string[];
@@ -69,7 +69,7 @@ export interface SATQuestion {
   time_budget_s: number;
 }
 
-export interface RouterOutput {
+export interface RouterOutputLegacy {
   section: SATSection;
   subdomain: EbrwDomain | MathDomain;
   prompt_text: string;
@@ -80,7 +80,7 @@ export interface RouterOutput {
   time_budget_s: number;
 }
 
-export interface EBRWSolution {
+export interface EBRWSolutionLegacy {
   final_choice: 'A' | 'B' | 'C' | 'D';
   confidence_0_1: number;
   domain: EbrwDomain;
@@ -90,7 +90,7 @@ export interface EBRWSolution {
   model: ModelName;
 }
 
-export interface MathSolution {
+export interface MathSolutionLegacy {
   answer_value_or_choice: string;
   confidence_0_1: number;
   method: 'symbolic' | 'numeric' | 'hybrid';
@@ -100,29 +100,29 @@ export interface MathSolution {
   code_hash?: string;
 }
 
-export interface ModelVote {
+export interface ModelVoteLegacy {
   model: ModelName;
   choice_or_value: string;
   confidence: number;
   reasoning?: string;
 }
 
-export interface VerificationResult {
+export interface VerificationResultLegacy {
   passed: boolean;
   confidence_adjustment: number;
   notes: string[];
 }
 
-export interface SATSolution {
+export interface SATSolutionLegacy {
   final_choice_or_value: string;
   section: SATSection;
   subdomain: EbrwDomain | MathDomain;
   confidence_0_1: number;
   time_ms: number;
-  model_votes: ModelVote[];
+  model_votes: ModelVoteLegacy[];
   short_explanation: string;
   evidence_or_checklist: string[];
-  verification_result: VerificationResult;
+  verification_result: VerificationResultLegacy;
   escalated: boolean;
 }
 
