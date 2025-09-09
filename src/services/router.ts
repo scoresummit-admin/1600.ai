@@ -26,11 +26,9 @@ Required JSON output:
 
 export class SATRouter {
   private openaiApiKey: string;
-  private googleApiKey: string;
 
   constructor() {
     this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
-    this.googleApiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
   }
 
   async routeItem(item: SatItem): Promise<RoutedItem> {

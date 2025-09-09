@@ -1,9 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ModelConfig, ModelName } from '../types/sat';
 
 export class LLMClient {
   private config: ModelConfig;
-  private googleAI?: GoogleGenerativeAI;
 
   constructor(config: ModelConfig) {
     this.config = config;
@@ -17,12 +15,6 @@ export class LLMClient {
     }
     if (!this.config.google_api_key && (import.meta.env.VITE_GOOGLE_API_KEY || '')) {
       this.config.google_api_key = import.meta.env.VITE_GOOGLE_API_KEY || '';
-    }
-    
-    if (config.google_api_key) {
-      this.googleAI = new GoogleGenerativeAI(config.google_api_key);
-    } else if (import.meta.env.VITE_GOOGLE_API_KEY || '') {
-      this.googleAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY || '');
     }
   }
 
