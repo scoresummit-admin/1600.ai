@@ -1,4 +1,4 @@
-import { RoutedItem, SolverResult, VerifierReport, AggregatedAnswer } from '../types/sat';
+import { RoutedItem, SolverResult, VerifierReport, AggregatedAnswer } from '../../types/sat';
 import { EBRWSolver } from '../ebrw-solver';
 import { MathSolver } from '../math-solver';
 

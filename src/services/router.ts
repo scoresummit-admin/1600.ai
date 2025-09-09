@@ -1,167 +1,290 @@
-import { LLMClient } from './llm-client';
-import { RouterOutput, SATSection, EBRWDomain, MathDomain } from '../types/sat';
+import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../types/sat';
 
-export class SATRouter {
-  constructor(private llmClient: LLMClient) {}
-
-  async routeQuestion(questionText: string, choices: string[]): Promise<RouterOutput> {
-    const startTime = Date.now();
-    
-    // Clean and normalize text from OCR if needed
-    const cleanedText = this.cleanOCRText(questionText);
-    
-    const systemPrompt = `You are an expert SAT question classifier. Analyze the question and return ONLY valid JSON.
+const SYSTEM_ROUTER = `You are an expert SAT question classifier. Analyze the question and return ONLY valid JSON.
 
 EBRW Domains:
-- craft_structure: Author's purpose, point of view, rhetorical devices, text structure
-- information_ideas: Main ideas, supporting details, inferences, data interpretation  
-- standard_english_conventions: Grammar, punctuation, sentence structure, usage
-- expression_of_ideas: Organization, transitions, concision, style, tone
+- craft_structure: Author's purpose, point of view, rhetorical devices, text structure, meaning in context
+- information_ideas: Main ideas, supporting details, inferences, data interpretation, quantitative info
+- standard_english_conventions: Grammar, punctuation, sentence structure, usage, mechanics
+- expression_of_ideas: Organization, transitions, concision, style, tone, word choice
 
 Math Domains:
-- algebra: Linear equations, systems, inequalities, functions
-- advanced_math: Quadratics, polynomials, rational functions, exponentials
-- problem_solving_data_analysis: Ratios, percentages, statistics, data interpretation
-- geometry_trigonometry: Area, volume, coordinate geometry, trigonometric functions
+- algebra: Linear equations, systems, inequalities, functions, slopes
+- advanced_math: Quadratics, polynomials, rational functions, exponentials, logs
+- psda: Ratios, percentages, statistics, data interpretation, unit conversion
+- geometry_trig: Area, volume, coordinate geometry, trigonometric functions
 
 Required JSON output:
 {
-  "section": "EBRW|Math",
+  "section": "EBRW|MATH",
   "subdomain": "domain_name",
-  "prompt_text": "cleaned and normalized question text",
-  "choices": ["A", "B", "C", "D"],
-  "is_gridin": false,
-  "has_figure": false,
-  "extracted_numbers": [numbers found],
-  "time_budget_s": 25
+  "normalizedPrompt": "cleaned question text",
+  "choices": ["full choice A text", "full choice B text", "full choice C text", "full choice D text"],
+  "isGridIn": false,
+  "hasFigure": false
 }`;
 
-    const userPrompt = `Question: ${cleanedText}
+export class SATRouter {
+  private openaiApiKey: string;
+  private googleApiKey: string;
+
+  constructor() {
+    this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
+    this.googleApiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+  }
+
+  async routeItem(item: SatItem): Promise<RoutedItem> {
+    const startTime = Date.now();
+    
+    try {
+      let promptText = item.promptText || '';
+      let choices = item.choices || [];
+      let hasFigure = false;
+
+      // Handle screenshot input with dual OCR
+      if (item.source === 'screenshot' && item.imageBase64) {
+        console.log('🖼️ Processing screenshot with dual OCR...');
+        const ocrResults = await this.dualOCR(item.imageBase64);
+        
+        // Reconcile OCR results
+        promptText = ocrResults.openai.text.length > ocrResults.gemini.text.length 
+          ? ocrResults.openai.text 
+          : ocrResults.gemini.text;
+        
+        // Use choices from the result with more choices, or combine if different
+        if (ocrResults.openai.choices.length >= ocrResults.gemini.choices.length) {
+          choices = ocrResults.openai.choices;
+        } else {
+          choices = ocrResults.gemini.choices;
+        }
+        
+        // Mark as having figure if OCR results differ significantly
+        hasFigure = Math.abs(ocrResults.openai.text.length - ocrResults.gemini.text.length) > 50 ||
+                   ocrResults.openai.choices.length !== ocrResults.gemini.choices.length;
+      }
+
+      // Classify with GPT-5
+      const classification = await this.classifyQuestion(promptText, choices);
+      
+      const routedItem: RoutedItem = {
+        section: classification.section,
+        subdomain: classification.subdomain,
+        normalizedPrompt: classification.normalizedPrompt || this.cleanText(promptText),
+        choices: classification.choices.length > 0 ? classification.choices : choices,
+        isGridIn: item.isGridIn || choices.length === 0,
+        hasFigure: hasFigure || classification.hasFigure
+      };
+
+      const routeTime = Date.now() - startTime;
+      console.log(`📍 Routed as ${routedItem.section}/${routedItem.subdomain} in ${routeTime}ms`);
+      
+      return routedItem;
+      
+    } catch (error) {
+      console.error('Router error:', error);
+      return this.fallbackRouting(item);
+    }
+  }
+
+  private async dualOCR(imageBase64: string): Promise<{
+    openai: { text: string; choices: string[] };
+    gemini: { text: string; choices: string[] };
+  }> {
+    const [openaiResult, geminiResult] = await Promise.allSettled([
+      this.extractWithOpenAI(imageBase64),
+      this.extractWithGemini(imageBase64)
+    ]);
+
+    return {
+      openai: openaiResult.status === 'fulfilled' ? openaiResult.value : { text: '', choices: [] },
+      gemini: geminiResult.status === 'fulfilled' ? geminiResult.value : { text: '', choices: [] }
+    };
+  }
+
+  private async extractWithOpenAI(imageBase64: string): Promise<{ text: string; choices: string[] }> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`
+              }
+            }
+          ]
+        }],
+        max_tokens: 1000,
+        temperature: 0.1
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI Vision API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    
+    try {
+      const parsed = JSON.parse(content);
+      return {
+        text: parsed.text || '',
+        choices: parsed.choices || []
+      };
+    } catch {
+      return { text: content, choices: [] };
+    }
+  }
+
+  private async extractWithGemini(imageBase64: string): Promise<{ text: string; choices: string[] }> {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${this.googleApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              text: 'Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+            },
+            {
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: imageBase64
+              }
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 1000
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini Vision API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.candidates[0].content.parts[0].text;
+    
+    try {
+      const parsed = JSON.parse(content);
+      return {
+        text: parsed.text || '',
+        choices: parsed.choices || []
+      };
+    } catch {
+      return { text: content, choices: [] };
+    }
+  }
+
+  private async classifyQuestion(promptText: string, choices: string[]): Promise<{
+    section: Section;
+    subdomain: EbrwDomain | MathDomain;
+    normalizedPrompt?: string;
+    choices: string[];
+    hasFigure: boolean;
+  }> {
+    const userPrompt = `Question: ${promptText}
 
 Choices:
 ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
-    try {
-      const response = await this.llmClient.callModel('gpt-5', [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ], {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: SYSTEM_ROUTER },
+          { role: 'user', content: userPrompt }
+        ],
         temperature: 0.1,
-        max_tokens: 500,
-        timeout_ms: 5000
-      });
+        max_tokens: 800,
+        reasoning_effort: 'low'
+      }),
+    });
 
-      // Handle both wrapped and unwrapped JSON responses
-      let jsonContent = response.content.trim();
-      if (jsonContent.startsWith('```json')) {
-        jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
-      } else if (jsonContent.startsWith('```')) {
-        jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
-      }
-      
-      const result = JSON.parse(jsonContent);
-      
-      // Validate and set defaults
-      const routerOutput: RouterOutput = {
-        section: this.validateSection(result.section, cleanedText),
-        subdomain: result.subdomain || this.getDefaultSubdomain(this.validateSection(result.section, cleanedText)),
-        prompt_text: result.prompt_text || cleanedText,
-        choices: result.choices || choices,
-        is_gridin: result.is_gridin || false,
-        has_figure: result.has_figure || false,
-        extracted_numbers: result.extracted_numbers || this.extractNumbers(questionText),
-        time_budget_s: result.time_budget_s || 25
-      };
-
-      const latency = Date.now() - startTime;
-      console.log(`Router classified question in ${latency}ms as ${routerOutput.section}/${routerOutput.subdomain}`);
-
-      return routerOutput;
-    } catch (error) {
-      console.error('Router error:', error);
-      
-      // Fallback classification
-      return this.fallbackClassification(cleanedText, choices);
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
     }
+
+    const data = await response.json();
+    let content = data.choices[0].message.content.trim();
+    
+    // Handle JSON markdown wrapper
+    if (content.startsWith('```json')) {
+      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (content.startsWith('```')) {
+      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    const result = JSON.parse(content);
+    
+    return {
+      section: result.section,
+      subdomain: result.subdomain,
+      normalizedPrompt: result.normalizedPrompt,
+      choices: result.choices || choices,
+      hasFigure: result.hasFigure || false
+    };
   }
 
-  private cleanOCRText(text: string): string {
+  private cleanText(text: string): string {
     return text
-      // Fix common OCR spacing issues
+      .replace(/\s+/g, ' ')
       .replace(/([a-z])([A-Z])/g, '$1 $2')
-      // Fix number/letter combinations
       .replace(/(\d)([a-zA-Z])/g, '$1 $2')
       .replace(/([a-zA-Z])(\d)/g, '$1 $2')
-      // Clean up multiple spaces
-      .replace(/\s+/g, ' ')
-      // Fix common math symbols
-      .replace(/\bx\b/g, '×')
-      .replace(/\bdiv\b/g, '÷')
-      // Remove artifacts
-      .replace(/[|_]/g, '')
       .trim();
   }
 
-  private validateSection(section: string, questionText: string): SATSection {
-    if (section === 'EBRW' || section === 'Math') {
-      return section;
-    }
-    
-    // Fallback heuristics
-    const text = (section + ' ' + questionText).toLowerCase();
-    if (text.includes('math') || text.includes('algebra') || text.includes('geometry')) {
-      return 'Math';
-    }
-    return 'EBRW';
-  }
-
-  private getDefaultSubdomain(section: SATSection): EBRWDomain | MathDomain {
-    if (section === 'EBRW') {
-      return 'information_ideas' as EBRWDomain;
-    } else {
-      return 'algebra' as MathDomain;
-    }
-  }
-  private extractNumbers(text: string): number[] {
-    const numberRegex = /-?\d+\.?\d*/g;
-    const matches = text.match(numberRegex);
-    return matches ? matches.map(Number).filter(n => !isNaN(n)) : [];
-  }
-
-  private fallbackClassification(questionText: string, choices: string[]): RouterOutput {
-    const text = questionText.toLowerCase();
+  private fallbackRouting(item: SatItem): RoutedItem {
+    const text = (item.promptText || '').toLowerCase();
+    const choices = item.choices || [];
     
     // Math indicators
     const mathKeywords = ['equation', 'solve', 'graph', 'function', 'angle', 'area', 'volume', 'percent', 'ratio'];
     const isMath = mathKeywords.some(keyword => text.includes(keyword)) || 
                    text.includes('=') || 
-                   text.includes('x²') || 
-                   text.includes('√') ||
                    /\b\d+\s*[+\-*/]\s*\d+\b/.test(text);
 
     if (isMath) {
       return {
-        section: 'Math',
+        section: 'MATH',
         subdomain: 'algebra' as MathDomain,
-        prompt_text: questionText,
+        normalizedPrompt: this.cleanText(item.promptText || ''),
         choices,
-        is_gridin: choices.length === 0,
-        has_figure: false,
-        extracted_numbers: this.extractNumbers(questionText),
-        time_budget_s: 30
+        isGridIn: choices.length === 0,
+        hasFigure: false
       };
     }
 
-    // EBRW fallback
     return {
       section: 'EBRW',
-      subdomain: 'information_ideas' as EBRWDomain,
-      prompt_text: questionText,
+      subdomain: 'information_ideas' as EbrwDomain,
+      normalizedPrompt: this.cleanText(item.promptText || ''),
       choices,
-      is_gridin: false,
-      has_figure: false,
-      extracted_numbers: [],
-      time_budget_s: 20
+      isGridIn: false,
+      hasFigure: false
     };
   }
 }

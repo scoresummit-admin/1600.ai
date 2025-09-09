@@ -1,5 +1,5 @@
-import { RoutedItem, SolverResult, VerifierReport } from '../types/sat';
-import { runPython } from '../lib/pythonSandbox';
+import { RoutedItem, SolverResult, VerifierReport } from '../../types/sat';
+import { runPython } from '../../lib/pythonSandbox';
 
 export class MathVerifier {
   constructor() {}

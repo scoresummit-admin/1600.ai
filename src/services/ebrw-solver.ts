@@ -1,224 +1,199 @@
-import { LLMClient } from './llm-client';
-import { EBRWSolution, EBRWDomain } from '../types/sat';
+import { RoutedItem, SolverResult, EbrwDomain } from '../types/sat';
+
+const SYSTEM_EBRW = `You are an expert SAT EBRW solver.
+
+Return ONLY the JSON schema provided; do not reveal chain-of-thought. Provide a brief explanation and 1–2 evidence items (short direct quotes or a named grammar rule).
+
+Cheat-sheet (for reference; use minimally):
+- Craft & Structure: central idea, author's purpose, tone, meaning-in-context, function of a sentence, text structure, logical transitions.
+- Information & Ideas: locate support, inference from explicit info, quantitative info in charts/tables, best evidence lines.
+- Standard English Conventions (rules to name when applicable):
+  • Subject–verb agreement; pronoun–antecedent agreement; pronoun case
+  • Modifier placement & dangling modifiers
+  • Parallelism (lists, paired constructions: either/or, not only/but also)
+  • Verb tense & sequence; conditional mood
+  • Punctuation: comma with nonessential appositive/relative clause; comma splice/run-on; semicolon vs comma; colon for explanation/list; dash for interruption
+  • Possessives & plurals (its/it's, plural vs possessive), apostrophes
+  • Comparison errors (like vs as; fewer/less)
+  • Concision & redundancy; idioms & prepositions
+- Expression of Ideas: organization, cohesion, precise word choice, concision, maintain tone and style.
+
+Instructions:
+1) Parse the item and options. If grammar, NAME the rule you used.
+2) For reading questions, quote 3–8 words that directly support your choice (no ellipses mid-quote).
+3) Prefer the most precise, concise option consistent with purpose and tone.
+4) Output valid JSON only.
+
+Required JSON schema:
+{
+  "final_choice": "A|B|C|D",
+  "confidence_0_1": number,
+  "domain": "craft_structure|information_ideas|standard_english_conventions|expression_of_ideas",
+  "short_explanation": "≤2 sentences",
+  "evidence": ["short quote or grammar rule", "optional second"],
+  "elimination_notes": {"A": "...", "B": "...", "C": "...", "D": "..."}
+}`;
 
 export class EBRWSolver {
-  constructor(private llmClient: LLMClient) {}
+  private openaiApiKey: string;
 
-  async solve(
-    prompt: string, 
-    choices: string[], 
-    domain: EBRWDomain,
-    timeoutMs: number = 15000
-  ): Promise<EBRWSolution> {
+  constructor() {
+    this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
+  }
+
+  async solve(item: RoutedItem, timeoutMs: number = 12000): Promise<SolverResult> {
     const startTime = Date.now();
-
+    
     try {
-      // Primary solver: GPT-5 with low reasoning effort
-      const primarySolution = await this.solvePrimary(prompt, choices, domain, timeoutMs * 0.6);
+      // Primary solve with GPT-5 (low effort)
+      const primaryResult = await this.solvePrimary(item, timeoutMs * 0.8);
       
-      // If confidence is high, return immediately
-      if (primarySolution.confidence_0_1 >= 0.85) {
-        console.log(`EBRW solved with high confidence (${primarySolution.confidence_0_1}) in ${Date.now() - startTime}ms`);
-        return primarySolution;
-      }
-
-      // Cross-check with Claude 3.5 Sonnet for lower confidence answers
-      try {
-        const crossCheck = await this.solveCrossCheck(prompt, choices, domain, timeoutMs * 0.4);
-        
-        // If models agree, boost confidence
-        if (crossCheck.final_choice === primarySolution.final_choice) {
-          primarySolution.confidence_0_1 = Math.min(0.95, primarySolution.confidence_0_1 + 0.15);
-          console.log(`EBRW models agreed, boosted confidence to ${primarySolution.confidence_0_1}`);
-        } else {
-          // Models disagree - return higher confidence solution
-          const finalSolution = crossCheck.confidence_0_1 > primarySolution.confidence_0_1 ? crossCheck : primarySolution;
-          console.log(`EBRW models disagreed, using ${finalSolution.model} solution`);
-          return finalSolution;
+      // Check if escalation is needed
+      if (primaryResult.confidence < 0.72 || this.isAmbiguous(primaryResult)) {
+        console.log('🔄 EBRW escalating to GPT-5-Thinking...');
+        try {
+          const escalatedResult = await this.solveEscalated(item, timeoutMs * 0.2);
+          
+          // Return the higher confidence result
+          const finalResult = escalatedResult.confidence > primaryResult.confidence ? escalatedResult : primaryResult;
+          console.log(`✅ EBRW solved with escalation: ${finalResult.final} (${finalResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
+          return finalResult;
+        } catch (error) {
+          console.warn('EBRW escalation failed:', error);
         }
-      } catch (error) {
-        console.warn('EBRW cross-check failed:', error);
       }
-
-      return primarySolution;
+      
+      console.log(`✅ EBRW solved: ${primaryResult.final} (${primaryResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
+      return primaryResult;
+      
     } catch (error) {
       console.error('EBRW solver error:', error);
       throw error;
     }
   }
 
-  private async solvePrimary(
-    prompt: string, 
-    choices: string[], 
-    domain: EBRWDomain,
-    timeoutMs: number
-  ): Promise<EBRWSolution> {
-    const systemPrompt = `You are an expert SAT EBRW solver.
+  private async solvePrimary(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+    const userPrompt = `Domain: ${item.subdomain}
 
-Constraints:
-- Return ONLY the JSON schema below. Do not reveal chain-of-thought.
-- Provide a short, exam-appropriate explanation (1–2 sentences) and 1–2 evidence items (either brief quotes from the given passage OR the exact grammar rule name). No step-by-step reasoning.
-- Obey the section domains: Craft & Structure; Information & Ideas; Standard English Conventions; Expression of Ideas.
-- If options are paraphrases, prefer the one that is most precise, concise, and consistent with the author's purpose and tone.
-
-Required output (JSON):
-{
-  "final_choice": "A|B|C|D",
-  "confidence_0_1": 0.0-1.0,
-  "domain": "craft_structure|information_ideas|standard_english_conventions|expression_of_ideas",
-  "short_explanation": "≤2 sentences.",
-  "evidence": ["short quote or grammar rule", "optional second item"],
-  "elimination_notes": {"A":"≤8 words","B":"≤8 words","C":"≤8 words","D":"≤8 words"}
-}
-
-Instructions:
-1) Parse the item and options. If Standard English Conventions, name the rule (e.g., "subject–verb agreement," "modifier placement," "comma splice," "parallelism," "pronoun case," "apostrophe/plural," "comma with nonessential appositive").
-2) If Craft & Structure or Information & Ideas, quote 3–8 words from the passage that directly support your answer (no ellipses mid-quote).
-3) If two options seem viable, pick the one that best fits concision and cohesion.
-4) Never copy the entire passage; only short quotes. Never include private chain-of-thought.`;
-
-    const userPrompt = `Domain: ${domain}
-
-Question: ${prompt}
+Question: ${item.normalizedPrompt}
 
 Choices:
-${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
-    const response = await this.llmClient.callModel('gpt-5', [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], {
-      temperature: 0.2,
-      max_tokens: 800,
-      timeout_ms: timeoutMs
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: SYSTEM_EBRW },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+        reasoning_effort: 'low'
+      }),
     });
 
-    // Handle both wrapped and unwrapped JSON responses
-    let jsonContent = response.content.trim();
-    if (jsonContent.startsWith('```json')) {
-      jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (jsonContent.startsWith('```')) {
-      jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    let content = data.choices[0].message.content.trim();
+    
+    // Handle JSON markdown wrapper
+    if (content.startsWith('```json')) {
+      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (content.startsWith('```')) {
+      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
     }
     
-    const result = JSON.parse(jsonContent);
+    const result = JSON.parse(content);
     
     return {
-      final_choice: result.final_choice,
-      confidence_0_1: result.confidence_0_1,
-      domain: result.domain || domain,
-      short_explanation: result.short_explanation,
-      evidence: result.evidence || [],
-      elimination_notes: result.elimination_notes || {},
+      final: result.final_choice,
+      confidence: result.confidence_0_1,
+      meta: {
+        domain: result.domain,
+        explanation: result.short_explanation,
+        evidence: result.evidence,
+        elimination_notes: result.elimination_notes
+      },
       model: 'gpt-5'
     };
   }
 
-  async solveCrossCheck(
-    prompt: string, 
-    choices: string[], 
-    domain: EBRWDomain,
-    timeoutMs: number
-  ): Promise<EBRWSolution> {
-    const systemPrompt = `You are an expert SAT EBRW cross-validator. Provide an independent analysis.
+  private async solveEscalated(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+    const userPrompt = `Domain: ${item.subdomain}
 
-Return ONLY valid JSON:
-{
-  "final_choice": "A|B|C|D",
-  "confidence_0_1": 0.0-1.0,
-  "domain": "${domain}",
-  "short_explanation": "≤2 sentences",
-  "evidence": ["brief quote or rule"],
-  "elimination_notes": {"A":"reason","B":"reason","C":"reason","D":"reason"}
-}
+This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
 
-Focus on precision, textual evidence, and grammatical correctness.`;
+Question: ${item.normalizedPrompt}
 
-    const userPrompt = `${prompt}
+Choices:
+${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
-${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
-
-    const response = await this.llmClient.callModel('claude-3.5-sonnet', [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], {
-      temperature: 0.1,
-      max_tokens: 600,
-      timeout_ms: timeoutMs
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'o1-preview',
+        messages: [
+          { role: 'user', content: `${SYSTEM_EBRW}\n\n${userPrompt}` }
+        ],
+        max_completion_tokens: 1000,
+        reasoning_effort: 'medium'
+      }),
     });
 
-    // Handle both wrapped and unwrapped JSON responses
-    let jsonContent = response.content.trim();
-    if (jsonContent.startsWith('```json')) {
-      jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (jsonContent.startsWith('```')) {
-      jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    let content = data.choices[0].message.content.trim();
+    
+    // Handle JSON markdown wrapper
+    if (content.startsWith('```json')) {
+      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (content.startsWith('```')) {
+      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
     }
     
-    const result = JSON.parse(jsonContent);
+    const result = JSON.parse(content);
     
     return {
-      final_choice: result.final_choice,
-      confidence_0_1: result.confidence_0_1,
-      domain: result.domain || domain,
-      short_explanation: result.short_explanation,
-      evidence: result.evidence || [],
-      elimination_notes: result.elimination_notes || {},
-      model: 'claude-3.5-sonnet'
+      final: result.final_choice,
+      confidence: Math.min(0.95, result.confidence_0_1 + 0.1), // Boost confidence for escalated results
+      meta: {
+        domain: result.domain,
+        explanation: result.short_explanation,
+        evidence: result.evidence,
+        elimination_notes: result.elimination_notes,
+        escalated: true
+      },
+      model: 'gpt-5-thinking'
     };
   }
 
-  // Google Gemini as additional validator for complex cases
-  async solveWithGemini(
-    prompt: string, 
-    choices: string[], 
-    domain: EBRWDomain,
-    timeoutMs: number = 10000
-  ): Promise<EBRWSolution> {
-    const systemPrompt = `You are an expert SAT EBRW solver. Analyze this question and return only JSON.
-
-{
-  "final_choice": "A|B|C|D",
-  "confidence_0_1": 0.0-1.0,
-  "domain": "${domain}",
-  "short_explanation": "Brief explanation",
-  "evidence": ["supporting quote or rule"],
-  "elimination_notes": {"A":"reason","B":"reason","C":"reason","D":"reason"}
-}`;
-
-    const fullPrompt = `${systemPrompt}
-
-Question: ${prompt}
-
-Choices:
-${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
-
-    const response = await this.llmClient.callModel('gemini-2.5-pro', [
-      { role: 'user', content: fullPrompt }
-    ], {
-      temperature: 0.1,
-      max_tokens: 600,
-      timeout_ms: timeoutMs
-    });
-
-    // Handle both wrapped and unwrapped JSON responses
-    let jsonContent = response.content.trim();
-    if (jsonContent.startsWith('```json')) {
-      jsonContent = jsonContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (jsonContent.startsWith('```')) {
-      jsonContent = jsonContent.replace(/```\n?/, '').replace(/\n?```$/, '');
-    }
+  private isAmbiguous(result: SolverResult): boolean {
+    // Check if elimination notes suggest close competition between options
+    const notes = result.meta.elimination_notes || {};
+    const noteValues = Object.values(notes) as string[];
     
-    const result = JSON.parse(jsonContent);
-    
-    return {
-      final_choice: result.final_choice,
-      confidence_0_1: result.confidence_0_1,
-      domain: result.domain || domain,
-      short_explanation: result.short_explanation,
-      evidence: result.evidence || [],
-      elimination_notes: result.elimination_notes || {},
-      model: 'gemini-2.5-pro'
-    };
+    // Look for indicators of ambiguity in elimination notes
+    const ambiguityIndicators = ['close', 'similar', 'both', 'either', 'unclear', 'possible'];
+    return noteValues.some(note => 
+      ambiguityIndicators.some(indicator => 
+        note.toLowerCase().includes(indicator)
+      )
+    );
   }
 }

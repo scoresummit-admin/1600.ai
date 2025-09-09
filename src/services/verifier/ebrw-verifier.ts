@@ -1,10 +1,10 @@
-import { RoutedItem, SolverResult, VerifierReport } from '../types/sat';
+import { RoutedItem, SolverResult, VerifierReport } from '../../types/sat';
 
 export class EBRWVerifier {
   private anthropicApiKey: string;
 
   constructor() {
-    this.anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
+    this.anthropicApiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
   }
 
   async verify(item: RoutedItem, solverResult: SolverResult): Promise<VerifierReport> {

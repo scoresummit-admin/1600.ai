@@ -55,7 +55,7 @@ export interface AggregatedAnswer {
 // Legacy compatibility types (will be phased out)
 export type SATSection = Section;
 export type EBRWDomain = EbrwDomain;
-export type MathDomain as MathDomainLegacy = MathDomain;
+export type MathDomainLegacy = MathDomain;
 export type ModelName = 'gpt-5' | 'gpt-5-thinking' | 'o4-mini' | 'claude-3.5-sonnet' | 'gemini-2.5-pro' | 'qwen2.5-math-72b';
 
 export interface SATQuestion {
