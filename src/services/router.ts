@@ -7,6 +7,9 @@ export class SATRouter {
   async routeQuestion(questionText: string, choices: string[]): Promise<RouterOutput> {
     const startTime = Date.now();
     
+    // Clean and normalize text from OCR if needed
+    const cleanedText = this.cleanOCRText(questionText);
+    
     const systemPrompt = `You are an expert SAT question classifier. Analyze the question and return ONLY valid JSON.
 
 EBRW Domains:
@@ -25,7 +28,7 @@ Required JSON output:
 {
   "section": "EBRW|Math",
   "subdomain": "domain_name",
-  "prompt_text": "cleaned question text",
+  "prompt_text": "cleaned and normalized question text",
   "choices": ["A", "B", "C", "D"],
   "is_gridin": false,
   "has_figure": false,
@@ -33,7 +36,7 @@ Required JSON output:
   "time_budget_s": 25
 }`;
 
-    const userPrompt = `Question: ${questionText}
+    const userPrompt = `Question: ${cleanedText}
 
 Choices:
 ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
@@ -55,7 +58,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       const routerOutput: RouterOutput = {
         section: this.validateSection(result.section),
         subdomain: result.subdomain,
-        prompt_text: result.prompt_text || questionText,
+        prompt_text: result.prompt_text || cleanedText,
         choices: result.choices || choices,
         is_gridin: result.is_gridin || false,
         has_figure: result.has_figure || false,
@@ -71,8 +74,25 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       console.error('Router error:', error);
       
       // Fallback classification
-      return this.fallbackClassification(questionText, choices);
+      return this.fallbackClassification(cleanedText, choices);
     }
+  }
+
+  private cleanOCRText(text: string): string {
+    return text
+      // Fix common OCR spacing issues
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      // Fix number/letter combinations
+      .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+      .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+      // Clean up multiple spaces
+      .replace(/\s+/g, ' ')
+      // Fix common math symbols
+      .replace(/\bx\b/g, '×')
+      .replace(/\bdiv\b/g, '÷')
+      // Remove artifacts
+      .replace(/[|_]/g, '')
+      .trim();
   }
 
   private validateSection(section: string): SATSection {

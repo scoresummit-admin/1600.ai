@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Send, FileText, Calculator } from 'lucide-react';
+import { Send, FileText, Calculator, Image } from 'lucide-react';
+import { ImageUpload } from './ImageUpload';
 
 interface QuestionInputProps {
   onSubmit: (question: string, choices: string[], correctAnswer?: string) => void;
@@ -11,6 +12,8 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
   const [choices, setChoices] = useState(['', '', '', '']);
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [questionType, setQuestionType] = useState<'multiple-choice' | 'grid-in'>('multiple-choice');
+  const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +30,26 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
     const newChoices = [...choices];
     newChoices[index] = value;
     setChoices(newChoices);
+  };
+
+  const handleImageProcessed = (questionText: string, extractedChoices: string[]) => {
+    setQuestion(questionText);
+    
+    if (extractedChoices.length >= 3) {
+      // Multiple choice question detected
+      setQuestionType('multiple-choice');
+      const paddedChoices = [...extractedChoices];
+      while (paddedChoices.length < 4) {
+        paddedChoices.push('');
+      }
+      setChoices(paddedChoices.slice(0, 4));
+    } else {
+      // Likely a grid-in question
+      setQuestionType('grid-in');
+      setChoices(['', '', '', '']);
+    }
+    
+    setIsProcessingImage(false);
   };
 
   const loadSampleQuestion = (type: 'ebrw' | 'math') => {
@@ -62,7 +85,32 @@ Which choice best describes the main purpose of the passage?`);
   return (
     <div className="card p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-slate-800">SAT Question Input</h2>
+        <div>
+          <h2 className="text-xl font-semibold text-slate-800">SAT Question Input</h2>
+          <div className="flex gap-4 mt-2">
+            <label className="flex items-center text-sm">
+              <input
+                type="radio"
+                value="text"
+                checked={inputMode === 'text'}
+                onChange={(e) => setInputMode(e.target.value as 'text')}
+                className="mr-2"
+              />
+              Text Input
+            </label>
+            <label className="flex items-center text-sm">
+              <input
+                type="radio"
+                value="image"
+                checked={inputMode === 'image'}
+                onChange={(e) => setInputMode(e.target.value as 'image')}
+                className="mr-2"
+              />
+              <Image className="w-4 h-4 mr-1" />
+              Screenshot
+            </label>
+          </div>
+        </div>
         <div className="flex gap-2">
           <button
             type="button"
@@ -85,6 +133,12 @@ Which choice best describes the main purpose of the passage?`);
         </div>
       </div>
 
+      {inputMode === 'image' ? (
+        <ImageUpload 
+          onImageProcessed={handleImageProcessed}
+          isProcessing={isProcessingImage}
+        />
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -168,13 +222,13 @@ Which choice best describes the main purpose of the passage?`);
 
         <button
           type="submit"
-          disabled={isLoading || !question.trim()}
+          disabled={isLoading || !question.trim() || isProcessingImage}
           className="btn-primary w-full flex items-center justify-center gap-2"
         >
-          {isLoading ? (
+          {isLoading || isProcessingImage ? (
             <>
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Solving...
+              {isProcessingImage ? 'Processing Image...' : 'Solving...'}
             </>
           ) : (
             <>
@@ -184,6 +238,7 @@ Which choice best describes the main purpose of the passage?`);
           )}
         </button>
       </form>
+      )}
     </div>
   );
 };

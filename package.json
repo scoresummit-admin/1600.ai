@@ -3,6 +3,7 @@
     "@google/generative-ai": "^0.24.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.542.0",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "tesseract.js": "^6.0.1"
   }
 }

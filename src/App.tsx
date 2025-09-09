@@ -40,7 +40,8 @@ function App() {
   };
 
   const handleQuestionSubmit = async (question: string, choices: string[], correctAnswer?: string) => {
-    if (!satEngine && !initializeEngine()) {
+    const engine = satEngine || initializeEngine();
+    if (!engine) {
       alert('Please configure at least one API key in the model settings.');
       setShowConfig(true);
       return;
@@ -50,13 +51,12 @@ function App() {
     setSolution(null);
 
     try {
-      const engine = satEngine || initializeEngine()!;
       const result = await engine.solveQuestion(question, choices, correctAnswer);
       setSolution(result);
       setMetrics(engine.getMetrics());
     } catch (error) {
       console.error('Error solving question:', error);
-      alert('Error solving question. Please check your API keys and try again.');
+      alert(`Error solving question: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your API keys and try again.`);
     } finally {
       setIsLoading(false);
     }
