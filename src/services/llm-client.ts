@@ -134,6 +134,9 @@ export class LLMClient {
     // Add reasoning_effort only for o1 models
     if (isO1Model && options.reasoning_effort) {
       requestBody.reasoning_effort = options.reasoning_effort;
+    } else {
+      // Remove reasoning_effort for non-o1 models to avoid API errors
+      delete requestBody.reasoning_effort;
     }
     
     // o1 models use max_completion_tokens instead of max_tokens

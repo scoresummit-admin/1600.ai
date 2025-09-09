@@ -219,7 +219,6 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
         ],
         temperature: 0.1,
         max_tokens: 800,
-        reasoning_effort: 'low'
       }),
     });
 

@@ -95,7 +95,6 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
         ],
         temperature: 0.1,
         max_tokens: 1000,
-        reasoning_effort: 'low'
       }),
     });
 

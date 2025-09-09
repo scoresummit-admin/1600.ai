@@ -93,7 +93,6 @@ ${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => 
           { role: 'user', content: `${SYSTEM_MATH}\n\n${userPrompt}` }
         ],
         max_completion_tokens: 1000,
-        reasoning_effort: 'low'
       }),
     });
 
