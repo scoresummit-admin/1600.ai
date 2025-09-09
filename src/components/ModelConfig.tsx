@@ -18,6 +18,16 @@ export const ModelConfig: React.FC<ModelConfigProps> = ({
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [tempConfig, setTempConfig] = useState<Partial<ModelConfigType>>(config);
 
+  // Initialize with environment variables if available
+  React.useEffect(() => {
+    setTempConfig({
+      ...config,
+      openai_api_key: config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY || '',
+      anthropic_api_key: config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+      google_api_key: config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY || '',
+    });
+  }, [config]);
+
   const toggleKeyVisibility = (key: string) => {
     setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
   };

@@ -7,8 +7,22 @@ export class LLMClient {
 
   constructor(config: ModelConfig) {
     this.config = config;
+    
+    // Use environment variables as fallback
+    if (!this.config.openai_api_key && import.meta.env.VITE_OPENAI_API_KEY) {
+      this.config.openai_api_key = import.meta.env.VITE_OPENAI_API_KEY;
+    }
+    if (!this.config.anthropic_api_key && import.meta.env.VITE_ANTHROPIC_API_KEY) {
+      this.config.anthropic_api_key = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    }
+    if (!this.config.google_api_key && import.meta.env.VITE_GOOGLE_API_KEY) {
+      this.config.google_api_key = import.meta.env.VITE_GOOGLE_API_KEY;
+    }
+    
     if (config.google_api_key) {
       this.googleAI = new GoogleGenerativeAI(config.google_api_key);
+    } else if (import.meta.env.VITE_GOOGLE_API_KEY) {
+      this.googleAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY);
     }
   }
 

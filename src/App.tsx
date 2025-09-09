@@ -13,6 +13,9 @@ function App() {
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   
   const [config, setConfig] = useState<ModelConfigType>({
+    openai_api_key: import.meta.env.VITE_OPENAI_API_KEY,
+    anthropic_api_key: import.meta.env.VITE_ANTHROPIC_API_KEY,
+    google_api_key: import.meta.env.VITE_GOOGLE_API_KEY,
     enabled_models: ['gpt-5', 'claude-3.5-sonnet', 'o4-mini'],
     reasoning_effort: 'low',
     max_tokens: 1000,
@@ -22,7 +25,17 @@ function App() {
   const [satEngine, setSatEngine] = useState<SATEngine | null>(null);
 
   const initializeEngine = useCallback(() => {
-    if (config.openai_api_key || config.anthropic_api_key || config.google_api_key) {
+    const hasOpenAI = config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY;
+    const hasAnthropic = config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY;
+    const hasGoogle = config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY;
+    
+    if (hasOpenAI || hasAnthropic || hasGoogle) {
+      const finalConfig = {
+        ...config,
+        openai_api_key: config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY,
+        anthropic_api_key: config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY,
+        google_api_key: config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY,
+      };
       const engine = new SATEngine(config);
       setSatEngine(engine);
       return engine;
@@ -42,7 +55,12 @@ function App() {
   const handleQuestionSubmit = async (question: string, choices: string[], correctAnswer?: string) => {
     const engine = satEngine || initializeEngine();
     if (!engine) {
-      alert('Please configure at least one API key in the model settings.');
+      console.log('Environment variables:', {
+        openai: import.meta.env.VITE_OPENAI_API_KEY ? 'Present' : 'Missing',
+        anthropic: import.meta.env.VITE_ANTHROPIC_API_KEY ? 'Present' : 'Missing',
+        google: import.meta.env.VITE_GOOGLE_API_KEY ? 'Present' : 'Missing'
+      });
+      alert('Please configure at least one API key. Check the console for environment variable status.');
       setShowConfig(true);
       return;
     }
@@ -62,7 +80,10 @@ function App() {
     }
   };
 
-  const hasValidConfig = config.openai_api_key || config.anthropic_api_key || config.google_api_key;
+  const hasValidConfig = 
+    config.openai_api_key || import.meta.env.VITE_OPENAI_API_KEY ||
+    config.anthropic_api_key || import.meta.env.VITE_ANTHROPIC_API_KEY ||
+    config.google_api_key || import.meta.env.VITE_GOOGLE_API_KEY;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
