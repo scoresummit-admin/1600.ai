@@ -98,7 +98,7 @@ export class SATEngine {
         verifierReport = await Promise.race([
           this.ebrwVerifier.verify(routedItem, solverResult),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('EBRW verifier timeout')), 6000)
+            setTimeout(() => reject(new Error('EBRW verifier timeout')), 18000)
           )
         ]);
         

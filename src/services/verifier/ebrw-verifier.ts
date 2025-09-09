@@ -92,7 +92,7 @@ Return JSON:
   "reasoning": "Brief explanation for your choice"
 }`;
 
-    const userPrompt = `${item.normalizedPrompt}
+    const userPrompt = `Passage and Question: ${item.normalizedPrompt}
 
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
@@ -108,6 +108,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
           max_tokens: 500,
           temperature: 0.1,
         }),
+        signal: AbortSignal.timeout(15000), // 15 second timeout
       });
 
       if (!response.ok) {
