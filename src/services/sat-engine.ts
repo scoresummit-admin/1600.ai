@@ -65,9 +65,11 @@ export class SATEngine {
       
       // Step 2: Solve based on section
       if (routerOutput.section === 'EBRW') {
-        return await this.solveEBRW(routerOutput, startTime, remainingTime, correctAnswer);
+        const ebrwDomain = routerOutput.subdomain as EBRWDomain;
+        return await this.solveEBRW({...routerOutput, subdomain: ebrwDomain}, startTime, remainingTime, correctAnswer);
       } else {
-        return await this.solveMath(routerOutput, startTime, remainingTime, correctAnswer);
+        const mathDomain = routerOutput.subdomain as MathDomain;
+        return await this.solveMath({...routerOutput, subdomain: mathDomain}, startTime, remainingTime, correctAnswer);
       }
       
     } catch (error) {
@@ -95,6 +97,12 @@ export class SATEngine {
     remainingTime: number,
     correctAnswer?: string
   ): Promise<SATSolution> {
+    // Validate this is actually an EBRW question
+    if (routerOutput.section !== 'EBRW') {
+      console.error('EBRW solver called for non-EBRW question:', routerOutput.section);
+      throw new Error(`EBRW solver received ${routerOutput.section} question`);
+    }
+    
     console.log('📚 Solving EBRW question...');
     
     const solutions = [];
@@ -191,6 +199,12 @@ export class SATEngine {
     remainingTime: number,
     correctAnswer?: string
   ): Promise<SATSolution> {
+    // Validate this is actually a math question
+    if (routerOutput.section !== 'Math') {
+      console.error('Math solver called for non-math question:', routerOutput.section);
+      throw new Error(`Math solver received ${routerOutput.section} question`);
+    }
+    
     console.log('🔢 Solving Math question...');
     
     const solutions = [];

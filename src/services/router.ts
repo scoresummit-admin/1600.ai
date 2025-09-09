@@ -55,8 +55,8 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       
       // Validate and set defaults
       const routerOutput: RouterOutput = {
-        section: this.validateSection(result.section),
-        subdomain: result.subdomain,
+        section: this.validateSection(result.section, cleanedText),
+        subdomain: result.subdomain || this.getDefaultSubdomain(this.validateSection(result.section, cleanedText)),
         prompt_text: result.prompt_text || cleanedText,
         choices: result.choices || choices,
         is_gridin: result.is_gridin || false,
@@ -94,19 +94,26 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       .trim();
   }
 
-  private validateSection(section: string): SATSection {
+  private validateSection(section: string, questionText: string): SATSection {
     if (section === 'EBRW' || section === 'Math') {
       return section;
     }
     
     // Fallback heuristics
-    const text = section.toLowerCase();
+    const text = (section + ' ' + questionText).toLowerCase();
     if (text.includes('math') || text.includes('algebra') || text.includes('geometry')) {
       return 'Math';
     }
     return 'EBRW';
   }
 
+  private getDefaultSubdomain(section: SATSection): EBRWDomain | MathDomain {
+    if (section === 'EBRW') {
+      return 'information_ideas' as EBRWDomain;
+    } else {
+      return 'algebra' as MathDomain;
+    }
+  }
   private extractNumbers(text: string): number[] {
     const numberRegex = /-?\d+\.?\d*/g;
     const matches = text.match(numberRegex);
