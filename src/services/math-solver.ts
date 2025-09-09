@@ -77,7 +77,7 @@ export class MathSolver {
     const userPrompt = `Domain: ${item.subdomain}
 ${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
 
-Question: ${item.normalizedPrompt}
+${item.fullText}
 
 ${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` : ''}`;
 

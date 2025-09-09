@@ -25,7 +25,7 @@ export class MathVerifier {
       }
 
       // 2. Domain validation
-      const domainCheck = this.verifyDomain(solverResult.final, item.normalizedPrompt);
+      const domainCheck = this.verifyDomain(solverResult.final, item.fullText);
       checks.push('domain');
       notes.push(...domainCheck.notes);
       if (!domainCheck.valid) {
@@ -34,7 +34,7 @@ export class MathVerifier {
       }
 
       // 3. Unit consistency
-      const unitCheck = this.verifyUnits(solverResult.final, item.normalizedPrompt);
+      const unitCheck = this.verifyUnits(solverResult.final, item.fullText);
       checks.push('units');
       notes.push(...unitCheck.notes);
       if (!unitCheck.valid) {
@@ -154,7 +154,7 @@ export class MathVerifier {
 
   private async verifySubstitution(item: RoutedItem, answer: string): Promise<{ valid: boolean; notes: string[] }> {
     // Generate verification code to substitute the answer back
-    console.log('Verifying substitution for item:', item.normalizedPrompt.substring(0, 50));
+    console.log('Verifying substitution for item:', item.fullText.substring(0, 50));
     const verificationCode = `
 # Verify answer by substitution
 answer = ${answer}

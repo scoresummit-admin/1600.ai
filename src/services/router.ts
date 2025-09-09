@@ -1,6 +1,6 @@
 import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../../types/sat';
 
-const SYSTEM_ROUTER = `You are an expert SAT question classifier. Analyze the question and return ONLY valid JSON.
+const SYSTEM_ROUTER = `You are an expert SAT question classifier. Analyze the question and return ONLY classification labels.
 
 EBRW Domains:
 - craft_structure: Author's purpose, point of view, rhetorical devices, text structure, meaning in context
@@ -14,13 +14,10 @@ Math Domains:
 - psda: Ratios, percentages, statistics, data interpretation, unit conversion
 - geometry_trig: Area, volume, coordinate geometry, trigonometric functions
 
-Required JSON output:
+Required JSON output (classification ONLY - do not modify text):
 {
   "section": "EBRW|MATH",
   "subdomain": "domain_name",
-  "normalizedPrompt": "cleaned question text",
-  "choices": ["full choice A text", "full choice B text", "full choice C text", "full choice D text"],
-  "isGridIn": false,
   "hasFigure": false
 }`;
 
@@ -67,8 +64,8 @@ export class SATRouter {
       const routedItem: RoutedItem = {
         section: classification.section,
         subdomain: classification.subdomain,
-        normalizedPrompt: classification.normalizedPrompt || promptText, // Ensure we always have the full text
-        choices: classification.choices || choices,
+        fullText: promptText, // verbatim from UI/OCR
+        choices: choices,     // verbatim from UI/OCR
         isGridIn: item.isGridIn || choices.length === 0,
         hasFigure: hasFigure || classification.hasFigure
       };
@@ -113,7 +110,7 @@ export class SATRouter {
           content: [
             {
               type: 'text',
-              text: 'Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+              text: 'Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
             },
             {
               type: 'image_url',
@@ -137,8 +134,9 @@ export class SATRouter {
     
     try {
       const parsed = JSON.parse(content);
+      const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
       return {
-        text: parsed.text || '',
+        text: fullText,
         choices: parsed.choices || []
       };
     } catch {
@@ -154,7 +152,7 @@ export class SATRouter {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: `Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}
+        prompt: `Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}
 
 Image data: data:image/jpeg;base64,${imageBase64}`,
         temperature: 0.1,
@@ -172,8 +170,9 @@ Image data: data:image/jpeg;base64,${imageBase64}`,
     
     try {
       const parsed = JSON.parse(content);
+      const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
       return {
-        text: parsed.text || '',
+        text: fullText,
         choices: parsed.choices || []
       };
     } catch {
@@ -185,8 +184,6 @@ Image data: data:image/jpeg;base64,${imageBase64}`,
     section: Section;
     subdomain: EbrwDomain | MathDomain;
     normalizedPrompt?: string;
-    choices: string[];
-    hasFigure: boolean;
   }> {
     const userPrompt = `Question: ${promptText}
 
@@ -229,8 +226,6 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     return {
       section: result.section,
       subdomain: result.subdomain,
-      normalizedPrompt: result.normalizedPrompt || promptText, // Fallback to original if not provided
-      choices: result.choices || choices,
       hasFigure: result.hasFigure || false
     };
   }
@@ -268,10 +263,11 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     return {
       section: 'EBRW',
       subdomain: 'information_ideas' as EbrwDomain,
-      normalizedPrompt: item.promptText || '',
+      fullText: item.promptText || '',
       choices,
       isGridIn: false,
       hasFigure: false
     };
   }
 }
+        fullText: item.promptText || '',

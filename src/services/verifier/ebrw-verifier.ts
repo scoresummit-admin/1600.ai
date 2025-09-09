@@ -8,7 +8,7 @@ export class EBRWVerifier {
     
     try {
       // Verify evidence exists in the passage
-      const evidenceCheck = this.verifyEvidence(solverResult.meta.evidence || [], item.normalizedPrompt);
+      const evidenceCheck = this.verifyEvidence(solverResult.meta.evidence || [], item.fullText);
       
       // Independent verification with Claude
       const independentResult = await this.independentVerification(item, solverResult);
@@ -92,7 +92,7 @@ Return JSON:
   "reasoning": "Brief explanation for your choice"
 }`;
 
-    const userPrompt = `Passage and Question: ${item.normalizedPrompt}
+    const userPrompt = `${item.fullText}
 
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 

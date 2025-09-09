@@ -20,7 +20,9 @@ export interface SatItem {
 export interface RoutedItem {
   section: Section;
   subdomain: EbrwDomain | MathDomain;
-  normalizedPrompt: string;
+  fullText: string;           // verbatim passage + question from UI/OCR
+  passageText?: string;       // just the passage part (if separable)
+  questionText?: string;      // just the question stem (if separable)
   choices: string[];
   isGridIn: boolean;
   hasFigure: boolean;

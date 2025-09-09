@@ -76,7 +76,7 @@ export class EBRWSolver {
     console.log('EBRW solver primary timeout:', timeoutMs); // Use the parameter
     const userPrompt = `Domain: ${item.subdomain}
 
-Question: ${item.normalizedPrompt}
+${item.fullText}
 
 Choices:
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
@@ -133,7 +133,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
 
 This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
 
-Question: ${item.normalizedPrompt}
+${item.fullText}
 
 Choices:
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
