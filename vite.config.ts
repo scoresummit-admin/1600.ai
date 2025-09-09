@@ -17,8 +17,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          ocr: ['tesseract.js'],
-          ai: ['@google/generative-ai']
+          ocr: ['tesseract.js']
         }
       }
     },
@@ -27,5 +26,4 @@ export default defineConfig({
     port: 3000,
     host: true
   }
-}
-)
+})
