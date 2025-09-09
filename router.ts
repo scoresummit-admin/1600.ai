@@ -1,0 +1,290 @@
+import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from './types/sat';
+
+const SYSTEM_ROUTER = `You are an expert SAT question classifier. Analyze the question and return ONLY valid JSON.
+
+EBRW Domains:
+- craft_structure: Author's purpose, point of view, rhetorical devices, text structure, meaning in context
+- information_ideas: Main ideas, supporting details, inferences, data interpretation, quantitative info
+- standard_english_conventions: Grammar, punctuation, sentence structure, usage, mechanics
+- expression_of_ideas: Organization, transitions, concision, style, tone, word choice
+
+Math Domains:
+- algebra: Linear equations, systems, inequalities, functions, slopes
+- advanced_math: Quadratics, polynomials, rational functions, exponentials, logs
+- psda: Ratios, percentages, statistics, data interpretation, unit conversion
+- geometry_trig: Area, volume, coordinate geometry, trigonometric functions
+
+Required JSON output:
+{
+  "section": "EBRW|MATH",
+  "subdomain": "domain_name",
+  "normalizedPrompt": "cleaned question text",
+  "choices": ["full choice A text", "full choice B text", "full choice C text", "full choice D text"],
+  "isGridIn": false,
+  "hasFigure": false
+}`;
+
+export class SATRouter {
+  private openaiApiKey: string;
+  private googleApiKey: string;
+
+  constructor() {
+    this.openaiApiKey = process.env.OPENAI_API_KEY || '';
+    this.googleApiKey = process.env.GOOGLE_API_KEY || '';
+  }
+
+  async routeItem(item: SatItem): Promise<RoutedItem> {
+    const startTime = Date.now();
+    
+    try {
+      let promptText = item.promptText || '';
+      let choices = item.choices || [];
+      let hasFigure = false;
+
+      // Handle screenshot input with dual OCR
+      if (item.source === 'screenshot' && item.imageBase64) {
+        console.log('🖼️ Processing screenshot with dual OCR...');
+        const ocrResults = await this.dualOCR(item.imageBase64);
+        
+        // Reconcile OCR results
+        promptText = ocrResults.openai.text.length > ocrResults.gemini.text.length 
+          ? ocrResults.openai.text 
+          : ocrResults.gemini.text;
+        
+        // Use choices from the result with more choices, or combine if different
+        if (ocrResults.openai.choices.length >= ocrResults.gemini.choices.length) {
+          choices = ocrResults.openai.choices;
+        } else {
+          choices = ocrResults.gemini.choices;
+        }
+        
+        // Mark as having figure if OCR results differ significantly
+        hasFigure = Math.abs(ocrResults.openai.text.length - ocrResults.gemini.text.length) > 50 ||
+                   ocrResults.openai.choices.length !== ocrResults.gemini.choices.length;
+      }
+
+      // Classify with GPT-5
+      const classification = await this.classifyQuestion(promptText, choices);
+      
+      const routedItem: RoutedItem = {
+        section: classification.section,
+        subdomain: classification.subdomain,
+        normalizedPrompt: classification.normalizedPrompt || this.cleanText(promptText),
+        choices: classification.choices.length > 0 ? classification.choices : choices,
+        isGridIn: item.isGridIn || choices.length === 0,
+        hasFigure: hasFigure || classification.hasFigure
+      };
+
+      const routeTime = Date.now() - startTime;
+      console.log(`📍 Routed as ${routedItem.section}/${routedItem.subdomain} in ${routeTime}ms`);
+      
+      return routedItem;
+      
+    } catch (error) {
+      console.error('Router error:', error);
+      return this.fallbackRouting(item);
+    }
+  }
+
+  private async dualOCR(imageBase64: string): Promise<{
+    openai: { text: string; choices: string[] };
+    gemini: { text: string; choices: string[] };
+  }> {
+    const [openaiResult, geminiResult] = await Promise.allSettled([
+      this.extractWithOpenAI(imageBase64),
+      this.extractWithGemini(imageBase64)
+    ]);
+
+    return {
+      openai: openaiResult.status === 'fulfilled' ? openaiResult.value : { text: '', choices: [] },
+      gemini: geminiResult.status === 'fulfilled' ? geminiResult.value : { text: '', choices: [] }
+    };
+  }
+
+  private async extractWithOpenAI(imageBase64: string): Promise<{ text: string; choices: string[] }> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`
+              }
+            }
+          ]
+        }],
+        max_tokens: 1000,
+        temperature: 0.1
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI Vision API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    
+    try {
+      const parsed = JSON.parse(content);
+      return {
+        text: parsed.text || '',
+        choices: parsed.choices || []
+      };
+    } catch {
+      return { text: content, choices: [] };
+    }
+  }
+
+  private async extractWithGemini(imageBase64: string): Promise<{ text: string; choices: string[] }> {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${this.googleApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              text: 'Extract the question text and answer choices from this SAT question image. Return JSON: {"text": "question text", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+            },
+            {
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: imageBase64
+              }
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 1000
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini Vision API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.candidates[0].content.parts[0].text;
+    
+    try {
+      const parsed = JSON.parse(content);
+      return {
+        text: parsed.text || '',
+        choices: parsed.choices || []
+      };
+    } catch {
+      return { text: content, choices: [] };
+    }
+  }
+
+  private async classifyQuestion(promptText: string, choices: string[]): Promise<{
+    section: Section;
+    subdomain: EbrwDomain | MathDomain;
+    normalizedPrompt?: string;
+    choices: string[];
+    hasFigure: boolean;
+  }> {
+    const userPrompt = `Question: ${promptText}
+
+Choices:
+${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: SYSTEM_ROUTER },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 800,
+        reasoning_effort: 'low'
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    let content = data.choices[0].message.content.trim();
+    
+    // Handle JSON markdown wrapper
+    if (content.startsWith('```json')) {
+      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (content.startsWith('```')) {
+      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    const result = JSON.parse(content);
+    
+    return {
+      section: result.section,
+      subdomain: result.subdomain,
+      normalizedPrompt: result.normalizedPrompt,
+      choices: result.choices || choices,
+      hasFigure: result.hasFigure || false
+    };
+  }
+
+  private cleanText(text: string): string {
+    return text
+      .replace(/\s+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+      .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+      .trim();
+  }
+
+  private fallbackRouting(item: SatItem): RoutedItem {
+    const text = (item.promptText || '').toLowerCase();
+    const choices = item.choices || [];
+    
+    // Math indicators
+    const mathKeywords = ['equation', 'solve', 'graph', 'function', 'angle', 'area', 'volume', 'percent', 'ratio'];
+    const isMath = mathKeywords.some(keyword => text.includes(keyword)) || 
+                   text.includes('=') || 
+                   /\b\d+\s*[+\-*/]\s*\d+\b/.test(text);
+
+    if (isMath) {
+      return {
+        section: 'MATH',
+        subdomain: 'algebra' as MathDomain,
+        normalizedPrompt: this.cleanText(item.promptText || ''),
+        choices,
+        isGridIn: choices.length === 0,
+        hasFigure: false
+      };
+    }
+
+    return {
+      section: 'EBRW',
+      subdomain: 'information_ideas' as EbrwDomain,
+      normalizedPrompt: this.cleanText(item.promptText || ''),
+      choices,
+      isGridIn: false,
+      hasFigure: false
+    };
+  }
+}

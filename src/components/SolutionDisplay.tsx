@@ -1,9 +1,9 @@
 import React from 'react';
 import { CheckCircle, XCircle, Clock, Brain, Target, AlertTriangle } from 'lucide-react';
-import { SATSolution } from '../types/sat';
+import { AggregatedAnswer } from '../../types/sat';
 
 interface SolutionDisplayProps {
-  solution: SATSolution | null;
+  solution: AggregatedAnswer | null;
   isLoading: boolean;
 }
 
@@ -66,18 +66,18 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
 
         <div className="bg-slate-50 rounded-lg p-4 mb-4">
           <div className="text-2xl font-bold text-slate-800 mb-2">
-            Answer: {solution.final_choice_or_value}
+            Answer: {solution.answer}
           </div>
-          <p className="text-slate-700">{solution.short_explanation}</p>
+          <p className="text-slate-700">{solution.shortExplanation}</p>
         </div>
 
         {/* Evidence/Checklist */}
         <div className="mb-4">
           <h3 className="font-medium text-slate-800 mb-2">
-            {solution.section === 'EBRW' ? 'Evidence' : 'Verification Checklist'}
+            {solution.section === 'EBRW' ? 'Evidence' : 'Checks'}
           </h3>
           <ul className="space-y-1">
-            {solution.evidence_or_checklist.map((item, index) => (
+            {solution.evidenceOrChecks.map((item, index) => (
               <li key={index} className="flex items-start gap-2 text-sm text-slate-600">
                 <CheckCircle className="w-4 h-4 text-success-500 mt-0.5 flex-shrink-0" />
                 <span>{item}</span>
@@ -90,18 +90,16 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
         <div className="flex items-center gap-6 text-sm text-slate-600 pt-4 border-t border-slate-200">
           <div className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
-            <span>{(solution.time_ms / 1000).toFixed(1)}s</span>
+            <span>{(solution.timeMs / 1000).toFixed(1)}s</span>
           </div>
           <div className="flex items-center gap-1">
             <Target className="w-4 h-4" />
-            <span>{solution.model_votes.length} model{solution.model_votes.length !== 1 ? 's' : ''}</span>
+            <span>{solution.modelVotes.length} model{solution.modelVotes.length !== 1 ? 's' : ''}</span>
           </div>
-          {solution.escalated && (
-            <div className="flex items-center gap-1 text-warning-600">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Escalated</span>
-            </div>
-          )}
+          <div className={`flex items-center gap-1 ${solution.verifier.passed ? 'text-success-600' : 'text-error-600'}`}>
+            {solution.verifier.passed ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+            <span>{solution.verifier.passed ? 'Verified' : 'Failed'}</span>
+          </div>
         </div>
       </div>
 
@@ -109,7 +107,7 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
       <div className="card p-6">
         <h3 className="font-semibold text-slate-800 mb-4">Model Consensus</h3>
         <div className="space-y-3">
-          {solution.model_votes.map((vote, index) => (
+          {solution.modelVotes.map((vote, index) => (
             <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
@@ -117,13 +115,13 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
                 </div>
                 <div>
                   <div className="font-medium text-slate-800">{vote.model}</div>
-                  {vote.reasoning && (
-                    <div className="text-sm text-slate-600">{vote.reasoning}</div>
+                  {vote.meta?.explanation && (
+                    <div className="text-sm text-slate-600">{vote.meta.explanation}</div>
                   )}
                 </div>
               </div>
               <div className="text-right">
-                <div className="font-bold text-slate-800">{vote.choice_or_value}</div>
+                <div className="font-bold text-slate-800">{vote.final}</div>
                 <div className="text-sm text-slate-600">
                   {(vote.confidence * 100).toFixed(0)}%
                 </div>
@@ -138,17 +136,18 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
         <h3 className="font-semibold text-slate-800 mb-4">Verification</h3>
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            {solution.verification_result.passed ? (
+            {solution.verifier.passed ? (
               <CheckCircle className="w-5 h-5 text-success-500" />
             ) : (
               <XCircle className="w-5 h-5 text-error-500" />
             )}
-            <span className={`font-medium ${solution.verification_result.passed ? 'text-success-700' : 'text-error-700'}`}>
-              {solution.verification_result.passed ? 'Verification Passed' : 'Verification Failed'}
+            <span className={`font-medium ${solution.verifier.passed ? 'text-success-700' : 'text-error-700'}`}>
+              {solution.verifier.passed ? 'Verification Passed' : 'Verification Failed'}
             </span>
+            <span className="text-sm text-slate-600">({(solution.verifier.score * 100).toFixed(0)}%)</span>
           </div>
           <ul className="ml-7 space-y-1">
-            {solution.verification_result.notes.map((note, index) => (
+            {solution.verifier.notes.map((note, index) => (
               <li key={index} className="text-sm text-slate-600">{note}</li>
             ))}
           </ul>
