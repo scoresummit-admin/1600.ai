@@ -67,8 +67,8 @@ export class SATRouter {
       const routedItem: RoutedItem = {
         section: classification.section,
         subdomain: classification.subdomain,
-        normalizedPrompt: classification.normalizedPrompt || this.cleanText(promptText),
-        normalizedPrompt: result.normalizedPrompt || promptText,
+        normalizedPrompt: classification.normalizedPrompt || promptText,
+        choices: classification.choices || choices,
         isGridIn: item.isGridIn || choices.length === 0,
         hasFigure: hasFigure || classification.hasFigure
       };
