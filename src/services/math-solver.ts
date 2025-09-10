@@ -254,6 +254,7 @@ export class MathSolver {
         } else {
           throw new Error('No valid results from any model');
         }
+  }
   private selectByDomainPreference(
     item: RoutedItem, 
     votes: ModelVote[], 
