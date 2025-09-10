@@ -71,8 +71,6 @@ export class SATRouter {
       const routedItem: RoutedItem = {
         section: classification.section,
         subdomain: classification.subdomain,
-        imageBase64: undefined,
-        ocrText: undefined,
         imageBase64: imageBase64 || undefined,
         ocrText: ocrText || undefined,
         fullText: promptText, // verbatim from UI/OCR
@@ -191,12 +189,6 @@ Image data: data:image/jpeg;base64,${imageBase64}`,
     }
   }
 
-  private async classifyQuestion(promptText: string, choices: string[]): Promise<{
-    section: Section;
-    subdomain: EbrwDomain | MathDomain;
-    hasFigure: boolean;
-  }> {
-  }
   private async classifyQuestion(
     promptText: string, 
     choices: string[], 
@@ -206,7 +198,6 @@ Image data: data:image/jpeg;base64,${imageBase64}`,
     subdomain: EbrwDomain | MathDomain;
     hasFigure: boolean;
   }> {
-
     let messages;
     
     if (imageBase64) {
