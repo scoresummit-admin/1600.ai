@@ -11,6 +11,7 @@ from fractions import Fraction
 import math
 import itertools
 import statistics
+import re
 from flask import Flask, request, jsonify
 
 # -------- limits (unchanged) --------
@@ -35,6 +36,7 @@ def execute_python(code, inputs=None):
                 'min': min, 'pow': pow, 'range': range, 'round': round,
                 'set': set, 'sorted': sorted, 'str': str, 'sum': sum,
                 'tuple': tuple, 'type': type, 'zip': zip, 'print': print,
+                're': re
             },
             'sympy': sympy,
             'np': np,
@@ -43,6 +45,7 @@ def execute_python(code, inputs=None):
             'math': math,
             'itertools': itertools,
             'statistics': statistics,
+            're': re
         }
         if inputs:
             safe_globals.update(inputs)
@@ -53,11 +56,15 @@ def execute_python(code, inputs=None):
         with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
             exec_globals = safe_globals.copy()
             exec(code, exec_globals)
+            
+            # Look for result in multiple possible variable names
             result = None
-            for name in ['result', 'answer', 'output', 'final']:
+            for name in ['result', 'answer', 'output', 'final', 'ans', 'solution']:
                 if name in exec_globals:
                     result = exec_globals[name]
                     break
+            
+            # If no explicit result variable, try to evaluate the last expression
             if result is None:
                 lines = code.strip().split('\n')
                 if lines:
@@ -73,10 +80,31 @@ def execute_python(code, inputs=None):
         stdout_text = stdout_capture.getvalue()
         stderr_text = stderr_capture.getvalue()
 
+        # Convert sympy expressions to strings/numbers
+        if result is not None:
+            if hasattr(result, 'evalf'):
+                # SymPy expression - try to evaluate numerically
+                try:
+                    numeric_result = float(result.evalf())
+                    # If it's a whole number, return as int
+                    if abs(numeric_result - round(numeric_result)) < 1e-10:
+                        result = int(round(numeric_result))
+                    else:
+                        result = numeric_result
+                except:
+                    result = str(result)
+            elif hasattr(result, '__len__') and not isinstance(result, str):
+                # Handle sequences/arrays
+                if len(result) == 1:
+                    result = result[0]
+
         if hasattr(result, 'item'):
             result = result.item()
         elif isinstance(result, np.ndarray):
-            result = result.tolist()
+            if result.size == 1:
+                result = result.item()
+            else:
+                result = result.tolist()
         elif hasattr(result, '__float__'):
             try:
                 result = float(result)

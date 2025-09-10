@@ -100,6 +100,12 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
             {solution.verifier.passed ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
             <span>{solution.verifier.passed ? 'Verified' : 'Failed'}</span>
           </div>
+          {solution.section === 'MATH' && solution.modelVotes[0]?.meta?.pythonResult && (
+            <div className={`flex items-center gap-1 ${solution.modelVotes[0].meta.pythonResult.ok ? 'text-success-600' : 'text-error-600'}`}>
+              <span className="font-mono text-xs">🐍</span>
+              <span>{solution.modelVotes[0].meta.pythonResult.ok ? 'Python ✓' : 'Python ✗'}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -118,6 +124,11 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
                   {vote.meta?.explanation && (
                     <div className="text-sm text-slate-600">{vote.meta.explanation}</div>
                   )}
+                  {vote.meta?.pythonResult?.ok && (
+                    <div className="text-xs text-success-600 font-mono">
+                      🐍 Python: {vote.meta.pythonResult.result}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="text-right">
@@ -130,6 +141,45 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution, isLo
           ))}
         </div>
       </div>
+
+      {/* Python Code Display for Math */}
+      {solution.section === 'MATH' && solution.modelVotes[0]?.meta?.python && (
+        <div className="card p-6">
+          <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+            <span className="font-mono text-lg">🐍</span>
+            Python Verification Code
+          </h3>
+          <div className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
+            <pre className="text-sm text-green-400 font-mono">
+              <code>{solution.modelVotes[0].meta.python}</code>
+            </pre>
+          </div>
+          {solution.modelVotes[0].meta.pythonResult && (
+            <div className="mt-3 text-sm">
+              <div className={`flex items-center gap-2 ${
+                solution.modelVotes[0].meta.pythonResult.ok ? 'text-success-600' : 'text-error-600'
+              }`}>
+                {solution.modelVotes[0].meta.pythonResult.ok ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Result: {solution.modelVotes[0].meta.pythonResult.result}</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span>Error: {solution.modelVotes[0].meta.pythonResult.error}</span>
+                  </>
+                )}
+              </div>
+              {solution.modelVotes[0].meta.pythonResult.stdout && (
+                <div className="mt-2 bg-slate-100 p-2 rounded text-xs font-mono">
+                  <strong>Output:</strong> {solution.modelVotes[0].meta.pythonResult.stdout}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Verification Results */}
       <div className="card p-6">

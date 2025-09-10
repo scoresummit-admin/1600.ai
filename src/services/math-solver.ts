@@ -1,5 +1,6 @@
 import { RoutedItem, SolverResult } from '../../types/sat';
 import { openrouterClient, openaiClient } from './model-clients';
+import { runPython } from '../lib/pythonSandbox';
 
 const SYSTEM_MATH = `You are an expert SAT Math solver with image understanding.
 
@@ -10,15 +11,18 @@ Return ONLY a JSON object (no code fences, no commentary) with this exact schema
   "method": "symbolic"|"numeric"|"hybrid",
   "checks": string[],
   "short_explanation": "≤2 sentences",
-  "python": string|null
+  "python": "# Python code to solve/verify the problem\n# Use sympy for symbolic math, numpy for numeric\n# Set 'result' variable with final answer"
 }
 
 Policy:
 - Extract variables and constraints.
 - Solve accurately; exact where feasible (fractions/simplify) or numeric if fine.
+- ALWAYS provide Python code that solves the problem step-by-step.
+- Use sympy for symbolic math, numpy for calculations.
 - Verify with quick checks: substitute_back | units | domain | graph_consistency.
 - For MC, return the LETTER; for grid-in, return a simplified numeric (no units).
-- Set "python": null for now. No chain-of-thought.`;
+- Python code should set 'result' variable with the final answer.
+- No chain-of-thought explanations.`;
 
 interface ModelVote {
   model: string;
@@ -264,7 +268,7 @@ ${item.ocrText ? 'OCR (for reference): ' + item.ocrText : ''}`;
     const client = provider === 'openrouter' ? openrouterClient : openaiClient;
     const response = await client(model, messages);
     
-    return this.parseResponse(response.text, model);
+    return await this.parseResponse(response.text, model);
   }
 
   private async callTextModel(model: string, item: RoutedItem): Promise<SolverResult> {
@@ -281,10 +285,10 @@ ${!item.isGridIn ? 'Choices:\n' + item.choices.map((c, i) => String.fromCharCode
     ];
 
     const response = await openrouterClient(model, messages);
-    return this.parseResponse(response.text, model);
+    return await this.parseResponse(response.text, model);
   }
 
-  private parseResponse(text: string, model: string): SolverResult {
+  private async parseResponse(text: string, model: string): Promise<SolverResult> {
     let parsed: any;
     
     try {
@@ -319,16 +323,110 @@ ${!item.isGridIn ? 'Choices:\n' + item.choices.map((c, i) => String.fromCharCode
     const confidence = Math.max(0, Math.min(1, parsed.confidence_0_1 || 0));
     const answer = parsed.answer_value_or_choice || 'A';
     
+    // Execute Python code if provided
+    let pythonResult = null;
+    let finalAnswer = answer;
+    let finalConfidence = confidence;
+    
+    if (parsed.python && typeof parsed.python === 'string' && parsed.python.trim().length > 10) {
+      try {
+        console.log(`🐍 Executing Python verification for ${model}...`);
+        pythonResult = await runPython(parsed.python);
+        
+        if (pythonResult.ok && pythonResult.result !== null && pythonResult.result !== undefined) {
+          const pythonAnswer = String(pythonResult.result);
+          console.log(`🐍 Python result: ${pythonAnswer}, Original: ${answer}`);
+          
+          // Check if Python result matches or is close
+          const pythonMatch = this.compareAnswers(pythonAnswer, answer);
+          
+          if (pythonMatch) {
+            // Python verification successful - boost confidence
+            finalConfidence = Math.min(0.98, confidence + 0.15);
+            console.log(`✅ Python verification matches, confidence boosted to ${finalConfidence.toFixed(2)}`);
+          } else {
+            // Python disagrees - check which one to trust
+            if (confidence < 0.8) {
+              // Low confidence in original, trust Python
+              finalAnswer = pythonAnswer;
+              finalConfidence = Math.max(0.7, confidence);
+              console.log(`🔄 Low confidence, using Python result: ${finalAnswer}`);
+            } else {
+              // High confidence in original, but Python disagrees - lower confidence
+              finalConfidence = Math.max(0.6, confidence * 0.8);
+              console.log(`⚠️ Python disagrees with high-confidence answer, reducing confidence to ${finalConfidence.toFixed(2)}`);
+            }
+          }
+        } else {
+          console.warn(`⚠️ Python execution failed or returned invalid result:`, pythonResult);
+          finalConfidence = Math.max(0.5, confidence * 0.9); // Slight penalty for failed Python
+        }
+      } catch (error) {
+        console.warn(`⚠️ Python execution error:`, error);
+        finalConfidence = Math.max(0.5, confidence * 0.9); // Slight penalty for Python error
+      }
+    } else {
+      console.log(`⚠️ No valid Python code provided by ${model}`);
+      finalConfidence = Math.max(0.6, confidence * 0.85); // Penalty for missing Python verification
+    }
+    
     return {
-      final: answer,
-      confidence,
+      final: finalAnswer,
+      confidence: finalConfidence,
       meta: {
         method: parsed.method || 'hybrid',
         checks: parsed.checks || [],
         explanation: parsed.short_explanation || 'Solution computed',
-        python: null // Always null for now
+        python: parsed.python || null,
+        pythonResult: pythonResult,
+        originalAnswer: answer,
+        originalConfidence: confidence
       },
       model
     };
+  }
+
+  private compareAnswers(answer1: string, answer2: string): boolean {
+    // Remove whitespace and convert to lowercase
+    const a1 = answer1.trim().toLowerCase();
+    const a2 = answer2.trim().toLowerCase();
+    
+    // Direct string match
+    if (a1 === a2) return true;
+    
+    // Try numeric comparison if both are numbers
+    const num1 = parseFloat(a1);
+    const num2 = parseFloat(a2);
+    
+    if (!isNaN(num1) && !isNaN(num2)) {
+      // Allow small floating point differences
+      return Math.abs(num1 - num2) < 0.001;
+    }
+    
+    // Try fraction comparison (e.g., "1/2" vs "0.5")
+    try {
+      const frac1 = this.evaluateFraction(a1);
+      const frac2 = this.evaluateFraction(a2);
+      if (frac1 !== null && frac2 !== null) {
+        return Math.abs(frac1 - frac2) < 0.001;
+      }
+    } catch {
+      // Ignore fraction parsing errors
+    }
+    
+    return false;
+  }
+
+  private evaluateFraction(str: string): number | null {
+    // Simple fraction evaluator for patterns like "3/4", "1/2", etc.
+    const match = str.match(/^(-?\d+)\s*\/\s*(\d+)$/);
+    if (match) {
+      const numerator = parseInt(match[1]);
+      const denominator = parseInt(match[2]);
+      if (denominator !== 0) {
+        return numerator / denominator;
+      }
+    }
+    return null;
   }
 }
