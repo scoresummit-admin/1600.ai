@@ -39,11 +39,11 @@ export class MathSolver {
 
   async solve(item: RoutedItem, timeoutMs: number = 16000): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log('Math solver timeout:', timeoutMs); // Use the parameter
+    console.log('Math solver timeout:', Math.min(timeoutMs, 50000)); // Cap at 50s
     
     try {
       // Primary solve with o4-mini
-      const primaryResult = await this.solvePrimary(item, timeoutMs * 0.9);
+      const primaryResult = await this.solvePrimary(item, Math.min(timeoutMs * 0.9, 45000));
       
       // Execute Python code if provided
       if (primaryResult.meta.python) {

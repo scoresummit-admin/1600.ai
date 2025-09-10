@@ -39,13 +39,19 @@ export default async function handler(req, res) {
     if (mode === 'extract') {
       // Current behavior - extract passage/question/choices from image
       if (imageBase64) {
+        // Clean the base64 data
+        let cleanBase64 = imageBase64;
+        if (cleanBase64.startsWith('data:')) {
+          cleanBase64 = cleanBase64.split(',')[1];
+        }
+        
         contents = [{
           parts: [
             { text: prompt || 'Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}' },
             { 
               inlineData: {
-                mimeType: imageBase64.startsWith('iVBORw0KGgo') ? 'image/png' : 'image/jpeg',
-                data: imageBase64.startsWith('data:') ? imageBase64.split(',')[1] : imageBase64
+                mimeType: cleanBase64.startsWith('iVBORw0KGgo') ? 'image/png' : 'image/jpeg',
+                data: cleanBase64
               }
             }
           ]

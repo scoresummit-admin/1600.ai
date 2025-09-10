@@ -45,17 +45,17 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem, timeoutMs = 12000): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log('🔄 EBRW solver starting with timeout:', timeoutMs);
+    console.log('🔄 EBRW solver starting with timeout:', Math.min(timeoutMs, 45000));
     
     try {
       // Primary solve with GPT-5 (low effort)
-      const primaryResult = await this.solvePrimary(item, timeoutMs * 0.7);
+      const primaryResult = await this.solvePrimary(item, Math.min(timeoutMs * 0.7, 30000));
       
       // Check if escalation is needed
       if (primaryResult.confidence < 0.75) {
         console.log('🔄 EBRW escalating to GPT-5-Thinking...');
         try {
-          const escalatedResult = await this.solveEscalated(item, timeoutMs * 0.3);
+          const escalatedResult = await this.solveEscalated(item, Math.min(timeoutMs * 0.3, 20000));
           
           // Return the higher confidence result
           const finalResult = {

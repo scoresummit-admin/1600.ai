@@ -106,7 +106,7 @@ Conduct thorough analysis and provide detailed scoring.`;
           fullText: item.fullText,
           imageBase64: item.imageBase64
         }),
-        signal: AbortSignal.timeout(15000)
+        signal: AbortSignal.timeout(30000) // Increase to 30s
       });
 
       if (response.ok) {
@@ -209,7 +209,7 @@ Return JSON:
           fullText: item.fullText,
           imageBase64: item.imageBase64
         }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(25000) // Increase to 25s
       });
 
       if (response.ok) {
@@ -246,7 +246,7 @@ Return JSON:
           maxOutputTokens: 1000,
           temperature: 0.1
         }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(20000) // Increase to 20s
       });
 
       if (response.ok) {

@@ -154,18 +154,19 @@ export class SATRouter {
   }
 
   private async extractWithGemini(imageBase64: string): Promise<{ text: string; choices: string[] }> {
-    // Call our serverless function instead of Google directly
+    // Call our serverless function with proper image data
     const response = await fetch('/api/google', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: `Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}
 
 Image data: data:image/jpeg;base64,${imageBase64}`,
+        mode: 'extract', // Use extract mode
+        imageBase64: imageBase64, // Send image data properly
         temperature: 0.1,
-        maxOutputTokens: 1000
+        maxOutputTokens: 2000 // Increase token limit
       }),
     });
 
