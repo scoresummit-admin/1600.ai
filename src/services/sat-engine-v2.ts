@@ -123,7 +123,7 @@ export class SATEngine {
           };
         }
         
-        this.metrics.model_usage['claude-3.5-sonnet']++;
+        this.metrics.model_usage['claude-opus-4-1-20250805']++;
         this.metrics.model_usage['claude-opus-4-1-20250805']++;
         
       } else {
