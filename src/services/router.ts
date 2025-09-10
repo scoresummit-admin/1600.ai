@@ -161,8 +161,7 @@ export class SATRouter {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-
-Image data: data:image/jpeg;base64,${imageBase64}`,
+        prompt: `Image data: data:image/jpeg;base64,${imageBase64}`,
         mode: 'extract', // Use extract mode
         imageBase64: imageBase64, // Send image data properly
         temperature: 0.1,
