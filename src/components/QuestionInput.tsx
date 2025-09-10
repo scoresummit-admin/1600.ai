@@ -3,30 +3,32 @@ import { Send, Image } from 'lucide-react';
 import { ImageUpload } from './ImageUpload';
 
 interface QuestionInputProps {
-  onSubmit: (question: string, choices: string[], correctAnswer?: string) => void;
+  onSubmit: (imageBase64: string, ocrText: string, choices: string[], correctAnswer?: string) => void;
   isLoading: boolean;
 }
 
 export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoading }) => {
-  const [question, setQuestion] = useState('');
+  const [imageBase64, setImageBase64] = useState('');
+  const [ocrText, setOcrText] = useState('');
   const [choices, setChoices] = useState(['', '', '', '']);
   const [questionType, setQuestionType] = useState<'multiple-choice' | 'grid-in'>('multiple-choice');
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [hasProcessedImage, setHasProcessedImage] = useState(false);
 
   const handleSubmitScreenshot = () => {
-    if (!question.trim()) return;
+    if (!imageBase64 || !ocrText.trim()) return;
     
     const validChoices = questionType === 'multiple-choice' 
       ? choices.filter(choice => choice.trim()) 
       : [];
     
-    onSubmit(question, validChoices);
+    onSubmit(imageBase64, ocrText, validChoices);
   };
 
-  const handleImageProcessed = (questionText: string, extractedChoices: string[]) => {
+  const handleImageProcessed = (base64Data: string, questionText: string, extractedChoices: string[]) => {
     setIsProcessingImage(false);
-    setQuestion(questionText);
+    setImageBase64(base64Data);
+    setOcrText(questionText);
     
     if (extractedChoices.length >= 3) {
       // Multiple choice question detected
@@ -71,9 +73,9 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
       {hasProcessedImage && (
         <div className="bg-slate-50 rounded-lg p-4 space-y-4">
           <div>
-            <h3 className="font-medium text-slate-800 mb-2">Extracted Question:</h3>
+            <h3 className="font-medium text-slate-800 mb-2">OCR Preview (for verification):</h3>
             <div className="bg-white p-3 rounded border text-sm">
-              {question || 'No question text extracted'}
+              {ocrText || 'No question text extracted'}
             </div>
           </div>
 
@@ -97,7 +99,7 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
             <button
               type="button"
               onClick={handleSubmitScreenshot}
-              disabled={isLoading || !question.trim()}
+              disabled={isLoading || !imageBase64 || !ocrText.trim()}
               className="btn-primary w-full flex items-center justify-center gap-2"
             >
               {isLoading ? (
@@ -108,7 +110,7 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  Solve This Question
+                  Analyze Screenshot & Solve
                 </>
               )}
             </button>

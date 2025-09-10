@@ -13,7 +13,7 @@ function App() {
   
   const [satEngine] = useState(() => new SATEngine());
 
-  const handleQuestionSubmit = async (question: string, choices: string[], correctAnswer?: string) => {
+  const handleQuestionSubmit = async (imageBase64: string, ocrText: string, choices: string[], correctAnswer?: string) => {
     // Check for required API keys
     const hasOpenAI = !!(import.meta.env.VITE_OPENAI_API_KEY);
     
@@ -30,7 +30,7 @@ function App() {
     const startTime = Date.now();
 
     try {
-      const result = await satEngine.solveQuestion(question, choices, correctAnswer);
+      const result = await satEngine.solveQuestion(imageBase64, ocrText, choices, correctAnswer);
       setSolution(result);
       setMetrics(satEngine.getMetrics());
       
@@ -39,7 +39,7 @@ function App() {
       setP95Timer(latency);
     } catch (error) {
       console.error('Error solving question:', error);
-      alert(`Error solving question: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your API keys and try again.`);
+      alert(`Error solving question: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }

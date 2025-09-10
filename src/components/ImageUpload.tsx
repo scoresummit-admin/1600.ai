@@ -48,20 +48,31 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, onSt
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
 
-    // Notify parent that processing is starting
-    onStartProcessing();
-
-    // Process with OCR
-    try {
-      const { OCRService } = await import('../services/ocr-service');
-      const ocrService = OCRService.getInstance();
+    // Convert file to base64
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Data = reader.result as string;
+      // Remove the data:image/jpeg;base64, prefix to get clean base64
+      const cleanBase64 = base64Data.split(',')[1];
       
-      const result = await ocrService.extractSATQuestion(file);
-      onImageProcessed(result.questionText, result.choices);
-    } catch (error) {
-      console.error('OCR processing failed:', error);
-      alert('Failed to process image. Please try again or enter the question manually.');
-    }
+      // Notify parent that processing is starting
+      onStartProcessing();
+
+      // Process with OCR for text extraction
+      try {
+        const { OCRService } = await import('../services/ocr-service');
+        const ocrService = OCRService.getInstance();
+        
+        const result = await ocrService.extractSATQuestion(file);
+        
+        // Pass both the base64 image data AND the OCR text
+        onImageProcessed(cleanBase64, result.questionText, result.choices);
+      } catch (error) {
+        console.error('OCR processing failed:', error);
+        alert('Failed to process image. Please try again or enter the question manually.');
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const clearImage = () => {

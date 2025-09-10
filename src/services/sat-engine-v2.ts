@@ -43,7 +43,8 @@ export class SATEngine {
   }
 
   async solveQuestion(
-    questionText: string, 
+    imageBase64: string,
+    ocrText: string,
     choices: string[],
     correctAnswer?: string
   ): Promise<AggregatedAnswer> {
@@ -57,7 +58,8 @@ export class SATEngine {
       const item: SatItem = {
         id: `q_${Date.now()}`,
         source: 'screenshot',  // We're now primarily screenshot-based
-        imageBase64: questionText, // questionText is actually imageBase64 in this context
+        imageBase64: imageBase64, // Actual base64 image data
+        promptText: ocrText, // OCR text for fallback
         choices: choices.length > 0 ? choices : undefined,
         isGridIn: choices.length === 0
       };
