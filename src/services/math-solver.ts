@@ -1,166 +1,335 @@
 import { RoutedItem, SolverResult } from '../../types/sat';
-import { runPython } from '../lib/pythonSandbox';
+import { openrouterClient, openaiClient } from './model-clients';
 
-const SYSTEM_MATH = `You are an expert SAT Math solver with access to a Python sandbox (SymPy, fractions, math) and image analysis capabilities.
+const SYSTEM_MATH = `You are an expert SAT Math solver with image understanding.
 
-When given an image, analyze the SAT math question directly from the image, including any graphs, diagrams, or figures.
-
-Return ONLY the JSON schema; do not reveal chain-of-thought.
-
-Cheat-sheet:
-- Algebra: linear equations/inequalities, systems, slopes & intercepts, absolute value, piecewise.
-- Advanced Math: quadratics (vertex, discriminant), polynomials (roots/factors), rational functions (domains, asymptotes), exponents & logs (change of base), function composition & inverse.
-- PSDA: ratios/rates/percent, unit conversion, weighted average & mixture, median/mean, standard deviation intuition, two-way tables, linear models (slope = rate).
-- Geometry & Trig: similar triangles, circle arc/sector, angle relationships, area/volume basics, Pythagorean & special triangles, basic sine/cosine in right triangles, coordinate geometry distance & midpoint.
-- Always check domain restrictions (no division by zero, radicand ≥ 0), and verify by substitution.
-
-Solve policy:
-1) Extract variables and constraints.
-2) Generate minimal Python to compute EXACTLY (fractions/simplify); or evaluate every choice programmatically and select the one that satisfies constraints.
-3) Perform verification ("substitute_back" and any relevant "units"/"domain" checks).
-4) Output the JSON; include the python code string.
-
-Required JSON schema:
+Return ONLY a JSON object (no code fences, no commentary) with this exact schema:
 {
   "answer_value_or_choice": "A|B|C|D|<numeric>",
   "confidence_0_1": number,
-  "method": "symbolic|numeric|hybrid",
-  "checks": ["substitute_back"|"units"|"domain"|"graph_consistency"],
+  "method": "symbolic"|"numeric"|"hybrid",
+  "checks": string[],
   "short_explanation": "≤2 sentences",
-  "python": "code string"
-}`;
+  "python": string|null
+}
+
+Policy:
+- Extract variables and constraints.
+- Solve accurately; exact where feasible (fractions/simplify) or numeric if fine.
+- Verify with quick checks: substitute_back | units | domain | graph_consistency.
+- For MC, return the LETTER; for grid-in, return a simplified numeric (no units).
+- Set "python": null for now. No chain-of-thought.`;
+
+interface ModelVote {
+  model: string;
+  answer: string;
+  confidence: number;
+  explanation: string;
+}
 
 export class MathSolver {
-  private openaiApiKey: string;
+  private qwenTextModel: string;
+  private deepseekTextModel: string;
+  private mistralTextModel: string;
+  private qwenVLModel: string;
+  private visionFallback: string;
 
   constructor() {
-    this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
+    this.qwenTextModel = import.meta.env.VITE_QWEN_TEXT_MODEL || 'qwen/qwen2.5-math-72b-instruct';
+    this.deepseekTextModel = import.meta.env.VITE_DEEPSEEK_TEXT_MODEL || 'deepseek/deepseek-r1';
+    this.mistralTextModel = import.meta.env.VITE_MISTRAL_TEXT_MODEL || 'mistral/mistral-large-latest';
+    this.qwenVLModel = import.meta.env.VITE_QWEN_VL_MODEL || 'qwen/qwen2.5-vl-72b-instruct';
+    this.visionFallback = import.meta.env.VITE_VISION_FALLBACK || 'gpt-4o';
   }
 
-  async solve(item: RoutedItem, timeoutMs: number = 16000): Promise<SolverResult> {
+  async solve(item: RoutedItem, timeoutMs: number = 45000): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log('Math solver timeout:', Math.min(timeoutMs, 50000)); // Cap at 50s
+    const hasVision = item.hasFigure || !!item.imageBase64;
+    
+    console.log(`🔢 Math solver starting: ${hasVision ? 'vision' : 'text'} mode`);
     
     try {
-      // Primary solve with o4-mini
-      const primaryResult = await this.solvePrimary(item, Math.min(timeoutMs * 0.9, 45000));
-      
-      // Execute Python code if provided
-      if (primaryResult.meta.python) {
-        try {
-          const pythonResult = await runPython(primaryResult.meta.python);
-          if (pythonResult.ok) {
-            primaryResult.meta.pythonResult = pythonResult.result;
-            primaryResult.meta.pythonOutput = pythonResult.stdout;
-            
-            // Boost confidence if Python execution succeeded
-            primaryResult.confidence = Math.min(0.95, primaryResult.confidence + 0.1);
-          } else {
-            console.warn('Python execution failed:', pythonResult.error);
-            primaryResult.meta.pythonError = pythonResult.error;
-            primaryResult.confidence *= 0.8; // Reduce confidence if Python failed
-          }
-        } catch (error) {
-          console.warn('Python sandbox error:', error);
-          primaryResult.confidence *= 0.8;
-        }
+      if (hasVision) {
+        return await this.solveVision(item, timeoutMs);
+      } else {
+        return await this.solveTextEnsemble(item, timeoutMs);
       }
-      
-      console.log(`✅ Math solved: ${primaryResult.final} (${primaryResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
-      return primaryResult;
-      
     } catch (error) {
       console.error('Math solver error:', error);
       throw error;
+    } finally {
+      const latencyMs = Date.now() - startTime;
+      console.log(`🔢 Math solver completed in ${latencyMs}ms`);
     }
   }
 
-  private async solvePrimary(item: RoutedItem, timeoutMs = 14000): Promise<SolverResult> {
-    console.log('Math solver primary timeout:', timeoutMs); // Use the parameter
-    
-    let messages;
-    
-    if (item.imageBase64) {
-      // Image-first approach
-      const userContent = `${SYSTEM_MATH}
+  private async solveVision(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+    const startTime = Date.now();
+    let modelUsed = '';
+    let modelsTried: string[] = [];
 
-Domain: ${item.subdomain}
+    // Try Qwen-VL first if configured
+    if (this.qwenVLModel && import.meta.env.VITE_OPENROUTER_API_KEY) {
+      try {
+        modelsTried.push(this.qwenVLModel);
+        const result = await this.callVisionModel(this.qwenVLModel, item, 'openrouter');
+        modelUsed = this.qwenVLModel;
+        
+        const latencyMs = Date.now() - startTime;
+        console.log(`{router: 'vision', modelsTried: [${modelsTried.join(', ')}], finalModel: '${modelUsed}', is_gridin: ${item.isGridIn}, latencyMs: ${latencyMs}}`);
+        
+        return result;
+      } catch (error) {
+        console.warn(`Qwen-VL failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        
+        // Check if it's an image_url error and retry with GPT-4o
+        if (error instanceof Error && error.message.includes('image_url')) {
+          console.log('Retrying with GPT-4o due to image_url error...');
+        }
+      }
+    }
+
+    // Fallback to GPT-4o if configured
+    if (this.visionFallback === 'gpt-4o' && import.meta.env.VITE_OPENAI_API_KEY) {
+      try {
+        modelsTried.push('gpt-4o');
+        const result = await this.callVisionModel('gpt-4o', item, 'openai');
+        modelUsed = 'gpt-4o';
+        
+        const latencyMs = Date.now() - startTime;
+        console.log(`{router: 'vision', modelsTried: [${modelsTried.join(', ')}], finalModel: '${modelUsed}', is_gridin: ${item.isGridIn}, latencyMs: ${latencyMs}}`);
+        
+        return result;
+      } catch (error) {
+        console.error(`GPT-4o vision fallback failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    throw new Error('All vision models failed or not configured');
+  }
+
+  private async solveTextEnsemble(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+    const startTime = Date.now();
+    const modelsTried: string[] = [];
+    const votes: ModelVote[] = [];
+
+    // Call Qwen and DeepSeek in parallel
+    const [qwenResult, deepseekResult] = await Promise.allSettled([
+      this.callTextModel(this.qwenTextModel, item).then(result => {
+        modelsTried.push(this.qwenTextModel);
+        return result;
+      }),
+      this.callTextModel(this.deepseekTextModel, item).then(result => {
+        modelsTried.push(this.deepseekTextModel);
+        return result;
+      })
+    ]);
+
+    // Process results
+    if (qwenResult.status === 'fulfilled') {
+      votes.push({
+        model: this.qwenTextModel,
+        answer: qwenResult.value.final,
+        confidence: qwenResult.value.confidence,
+        explanation: qwenResult.value.meta.explanation || ''
+      });
+    }
+
+    if (deepseekResult.status === 'fulfilled') {
+      votes.push({
+        model: this.deepseekTextModel,
+        answer: deepseekResult.value.final,
+        confidence: deepseekResult.value.confidence,
+        explanation: deepseekResult.value.meta.explanation || ''
+      });
+    }
+
+    if (votes.length === 0) {
+      throw new Error('Both Qwen and DeepSeek failed');
+    }
+
+    // Check for agreement
+    let finalResult: SolverResult;
+    let finalModel: string;
+
+    if (votes.length === 2 && votes[0].answer === votes[1].answer) {
+      // Agreement - pick the higher confidence one
+      const bestVote = votes[0].confidence >= votes[1].confidence ? votes[0] : votes[1];
+      finalResult = qwenResult.status === 'fulfilled' && votes[0].model === this.qwenTextModel ? 
+        qwenResult.value : deepseekResult.value as SolverResult;
+      finalModel = bestVote.model;
+    } else {
+      // Disagreement - call Mistral as tiebreaker
+      try {
+        modelsTried.push(this.mistralTextModel);
+        const mistralResult = await this.callTextModel(this.mistralTextModel, item);
+        votes.push({
+          model: this.mistralTextModel,
+          answer: mistralResult.final,
+          confidence: mistralResult.confidence,
+          explanation: mistralResult.meta.explanation || ''
+        });
+
+        // Majority vote
+        const answerCounts = new Map<string, { count: number; votes: ModelVote[] }>();
+        votes.forEach(vote => {
+          if (!answerCounts.has(vote.answer)) {
+            answerCounts.set(vote.answer, { count: 0, votes: [] });
+          }
+          const entry = answerCounts.get(vote.answer)!;
+          entry.count++;
+          entry.votes.push(vote);
+        });
+
+        const majority = Array.from(answerCounts.entries())
+          .sort((a, b) => b[1].count - a[1].count)[0];
+
+        if (majority[1].count > 1) {
+          // Clear majority
+          const bestVote = majority[1].votes.sort((a, b) => b.confidence - a.confidence)[0];
+          finalModel = bestVote.model;
+          
+          // Return the result from the winning model
+          if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
+            finalResult = qwenResult.value;
+          } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
+            finalResult = deepseekResult.value;
+          } else {
+            finalResult = mistralResult;
+          }
+        } else {
+          // No majority - use domain preference
+          finalResult = this.selectByDomainPreference(item, votes, qwenResult, deepseekResult);
+          finalModel = finalResult.model;
+        }
+      } catch (error) {
+        console.warn(`Mistral tiebreaker failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Fall back to highest confidence
+        const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
+        finalResult = bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' ? 
+          qwenResult.value : deepseekResult.value as SolverResult;
+        finalModel = bestVote.model;
+      }
+    }
+
+    // Update model votes in result
+    finalResult.meta.modelVotes = votes;
+    finalResult.model = finalModel;
+
+    const latencyMs = Date.now() - startTime;
+    console.log(`{router: 'text', modelsTried: [${modelsTried.join(', ')}], finalModel: '${finalModel}', is_gridin: ${item.isGridIn}, latencyMs: ${latencyMs}}`);
+
+    return finalResult;
+  }
+
+  private selectByDomainPreference(
+    item: RoutedItem, 
+    votes: ModelVote[], 
+    qwenResult: PromiseSettledResult<SolverResult>, 
+    deepseekResult: PromiseSettledResult<SolverResult>
+  ): SolverResult {
+    // Prefer Qwen for algebra/advanced_math, DeepSeek for PSDA/geometry_trig
+    const preferQwen = item.subdomain === 'algebra' || item.subdomain === 'advanced_math';
+    
+    if (preferQwen && qwenResult.status === 'fulfilled') {
+      return qwenResult.value;
+    } else if (!preferQwen && deepseekResult.status === 'fulfilled') {
+      return deepseekResult.value;
+    }
+    
+    // Fallback to highest confidence
+    const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
+    return bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' ? 
+      qwenResult.value : deepseekResult.value as SolverResult;
+  }
+
+  private async callVisionModel(model: string, item: RoutedItem, provider: 'openrouter' | 'openai'): Promise<SolverResult> {
+    const text = `Domain: ${item.subdomain}
 ${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
+${item.ocrText ? 'OCR (for reference): ' + item.ocrText : ''}`;
 
-Extract and solve this SAT math question from the image. Pay attention to any graphs, diagrams, or figures. Generate Python code to compute the exact answer.
-
-${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}`;
-      
-      messages = [{
+    const messages = [
+      { role: 'system', content: SYSTEM_MATH },
+      {
         role: 'user',
         content: [
-          {
-            type: 'text',
-            text: userContent
-          },
+          { type: 'text', text },
           {
             type: 'image_url',
-            image_url: {
-              url: `data:image/jpeg;base64,${item.imageBase64}`
-            }
+            image_url: { url: `data:image/jpeg;base64,${item.imageBase64}` }
           }
         ]
-      }];
-    } else {
-      // Fallback to text-based approach
-      const userPrompt = `Domain: ${item.subdomain}
+      }
+    ];
+
+    const client = provider === 'openrouter' ? openrouterClient : openaiClient;
+    const response = await client(model, messages);
+    
+    return this.parseResponse(response.text, model);
+  }
+
+  private async callTextModel(model: string, item: RoutedItem): Promise<SolverResult> {
+    const text = `Domain: ${item.subdomain}
 ${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
 
 ${item.fullText}
 
-${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` : ''}`;
-      
-      // Flatten system message into user message for o1-mini
-      messages = [
-        { role: 'user', content: `${SYSTEM_MATH}\n\n${userPrompt}` }
-      ];
-    }
+${!item.isGridIn ? 'Choices:\n' + item.choices.map((c, i) => String.fromCharCode(65 + i) + ') ' + c).join('\n') : ''}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'o1-mini',
-        messages,
-        temperature: 1,
-        max_completion_tokens: 1000,
-      }),
-    });
+    const messages = [
+      { role: 'system', content: SYSTEM_MATH },
+      { role: 'user', content: [{ type: 'text', text }] }
+    ];
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
+    const response = await openrouterClient(model, messages);
+    return this.parseResponse(response.text, model);
+  }
 
-    const data = await response.json();
-    let content = data.choices[0].message.content.trim();
+  private parseResponse(text: string, model: string): SolverResult {
+    let parsed: any;
     
-    // Handle JSON markdown wrapper
-    if (content.startsWith('```json')) {
-      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (content.startsWith('```')) {
-      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
+    try {
+      // First attempt: direct JSON parse
+      parsed = JSON.parse(text);
+    } catch {
+      try {
+        // Second attempt: strip code fences
+        let cleaned = text.trim();
+        if (cleaned.startsWith('```json')) {
+          cleaned = cleaned.replace(/```json\n?/, '').replace(/\n?```$/, '');
+        } else if (cleaned.startsWith('```')) {
+          cleaned = cleaned.replace(/```\n?/, '').replace(/\n?```$/, '');
+        }
+        parsed = JSON.parse(cleaned);
+      } catch {
+        try {
+          // Third attempt: extract first JSON object with regex
+          const jsonMatch = text.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error('No JSON object found');
+          }
+        } catch {
+          throw new Error(`Failed to parse JSON response. First 300 chars: ${text.substring(0, 300)}... Last 300 chars: ...${text.substring(Math.max(0, text.length - 300))}`);
+        }
+      }
     }
-    
-    const result = JSON.parse(content);
+
+    // Normalize and validate
+    const confidence = Math.max(0, Math.min(1, parsed.confidence_0_1 || 0));
+    const answer = parsed.answer_value_or_choice || 'A';
     
     return {
-      final: result.answer_value_or_choice,
-      confidence: result.confidence_0_1,
+      final: answer,
+      confidence,
       meta: {
-        method: result.method,
-        checks: result.checks,
-        explanation: result.short_explanation,
-        python: result.python
+        method: parsed.method || 'hybrid',
+        checks: parsed.checks || [],
+        explanation: parsed.short_explanation || 'Solution computed',
+        python: null // Always null for now
       },
-      model: 'o4-mini'
+      model
     };
   }
 }

@@ -60,7 +60,7 @@ export interface AggregatedAnswer {
 export type SATSection = Section;
 export type EBRWDomain = EbrwDomain;
 export type MathDomainLegacy = MathDomain;
-export type ModelName = 'gpt-5' | 'gpt-5-thinking' | 'o4-mini' | 'claude-opus-4-1-20250805' | 'claude-sonnet-4-20250514' | 'gemini-2.5-pro' | 'qwen2.5-math-72b';
+export type ModelName = 'gpt-5' | 'gpt-5-thinking' | 'o4-mini' | 'claude-opus-4-1-20250805' | 'claude-sonnet-4-20250514' | 'gemini-2.5-pro' | 'qwen2.5-math-72b' | 'deepseek-r1' | 'mistral-large' | 'qwen2.5-vl' | 'gpt-4o';
 
 export interface SATQuestionLegacy {
   id: string;
