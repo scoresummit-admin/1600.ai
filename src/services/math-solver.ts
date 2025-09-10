@@ -204,7 +204,7 @@ export class MathSolver {
           }
         } else {
           // No majority - use domain preference
-          finalResult = this.selectByDomainPreference(item, votes, qwenResult.status === 'fulfilled' ? qwenResult : null, deepseekResult.status === 'fulfilled' ? deepseekResult : null, mistralResult);
+          finalResult = this.selectByDomainPreference(item, votes, qwenResult, deepseekResult, mistralResult);
           finalModel = finalResult.model;
         }
       } catch (error) {
@@ -242,9 +242,9 @@ export class MathSolver {
     // Prefer Qwen for algebra/advanced_math, DeepSeek for PSDA/geometry_trig
     const preferQwen = item.subdomain === 'algebra' || item.subdomain === 'advanced_math';
     
-    if (preferQwen && qwenResult.status === 'fulfilled' && qwenResult.value) {
+    if (preferQwen && qwenResult.status === 'fulfilled') {
       return qwenResult.value;
-    } else if (!preferQwen && deepseekResult.status === 'fulfilled' && deepseekResult.value) {
+    } else if (!preferQwen && deepseekResult.status === 'fulfilled') {
       return deepseekResult.value;
     } else if (mistralResult) {
       return mistralResult;
@@ -255,7 +255,7 @@ export class MathSolver {
     if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
       return qwenResult.value;
     } else if (deepseekResult.status === 'fulfilled') {
-      return deepseekResult.status === 'fulfilled' ? deepseekResult.value : mistralResult!;
+      return deepseekResult.value;
     } else {
       return mistralResult || (() => { throw new Error('No valid results available'); })();
     }
