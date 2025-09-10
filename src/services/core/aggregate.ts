@@ -67,7 +67,7 @@ export class SATAggregator {
         if (finalConfidence < 0.72 && !escalationResult) {
           try {
             console.log('🔄 EBRW escalating due to verification failure...');
-            const escalated = await this.ebrwSolver.solve(item, 10000);
+            const escalated = await this.ebrwSolver.solve(item);
             modelVotes.push(escalated);
             finalResult = escalated;
             finalConfidence = escalated.confidence * 0.85;

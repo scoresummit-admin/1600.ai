@@ -132,7 +132,7 @@ export class SATEngine {
     
     try {
       // Primary solve with GPT-5
-      const primaryResult = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.6, 15000));
+      const primaryResult = await this.ebrwSolver.solve(routerOutput);
       
       // Convert SolverResult to EBRWSolution
       const primarySolution = {
@@ -159,7 +159,7 @@ export class SATEngine {
       if (primaryResult.confidence < 0.85 || !primaryVerification.passed) {
         try {
           // Use escalation for cross-check
-          const crossCheckResult = await this.ebrwSolver.solve(routerOutput, Math.min(remainingTime * 0.3, 10000));
+          const crossCheckResult = await this.ebrwSolver.solve(routerOutput);
           
           const crossCheckSolution = {
             final_choice: crossCheckResult.final as 'A' | 'B' | 'C' | 'D',
@@ -187,7 +187,7 @@ export class SATEngine {
       // Additional Google Gemini check for complex cases
       if (solutions.length > 1 && primaryResult.confidence < 0.8) {
         try {
-          const geminiResult = await this.ebrwSolver.solve(routerOutput, 8000);
+          const geminiResult = await this.ebrwSolver.solve(routerOutput);
           
           const geminiSolution = {
             final_choice: geminiResult.final as 'A' | 'B' | 'C' | 'D',

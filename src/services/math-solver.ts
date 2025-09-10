@@ -126,7 +126,7 @@ export class MathSolver {
     ]);
 
     // Process results
-    if (qwenResult.status === 'fulfilled') {
+    if (qwenResult.status === 'fulfilled' && qwenResult.value) {
       votes.push({
         model: this.qwenTextModel,
         answer: qwenResult.value.final,
@@ -135,7 +135,7 @@ export class MathSolver {
       });
     }
 
-    if (deepseekResult.status === 'fulfilled') {
+    if (deepseekResult.status === 'fulfilled' && deepseekResult.value) {
       votes.push({
         model: this.deepseekTextModel,
         answer: deepseekResult.value.final,
@@ -155,8 +155,13 @@ export class MathSolver {
     if (votes.length === 2 && votes[0].answer === votes[1].answer) {
       // Agreement - pick the higher confidence one
       const bestVote = votes[0].confidence >= votes[1].confidence ? votes[0] : votes[1];
-      finalResult = qwenResult.status === 'fulfilled' && votes[0].model === this.qwenTextModel ? 
-        qwenResult.value : deepseekResult.value as SolverResult;
+      if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
+        finalResult = qwenResult.value;
+      } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
+        finalResult = deepseekResult.value;
+      } else {
+        finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value : deepseekResult.value as SolverResult;
+      }
       finalModel = bestVote.model;
     } else {
       // Disagreement - call Mistral as tiebreaker
@@ -190,9 +195,9 @@ export class MathSolver {
           finalModel = bestVote.model;
           
           // Return the result from the winning model
-          if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
+          if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' && qwenResult.value) {
             finalResult = qwenResult.value;
-          } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
+          } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled' && deepseekResult.value) {
             finalResult = deepseekResult.value;
           } else {
             finalResult = mistralResult;
@@ -206,8 +211,13 @@ export class MathSolver {
         console.warn(`Mistral tiebreaker failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         // Fall back to highest confidence
         const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
-        finalResult = bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' ? 
-          qwenResult.value : (deepseekResult.status === 'fulfilled' ? deepseekResult.value : qwenResult.value);
+        if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
+          finalResult = qwenResult.value;
+        } else if (deepseekResult.status === 'fulfilled') {
+          finalResult = deepseekResult.value;
+        } else {
+          throw new Error('No valid results from any model');
+        }
         finalModel = bestVote.model;
       }
     }
@@ -231,16 +241,21 @@ export class MathSolver {
     // Prefer Qwen for algebra/advanced_math, DeepSeek for PSDA/geometry_trig
     const preferQwen = item.subdomain === 'algebra' || item.subdomain === 'advanced_math';
     
-    if (preferQwen && qwenResult.status === 'fulfilled') {
+    if (preferQwen && qwenResult.status === 'fulfilled' && qwenResult.value) {
       return qwenResult.value;
-    } else if (!preferQwen && deepseekResult.status === 'fulfilled') {
+    } else if (!preferQwen && deepseekResult.status === 'fulfilled' && deepseekResult.value) {
       return deepseekResult.value;
     }
     
     // Fallback to highest confidence
     const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
-    return bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' ? 
-      qwenResult.value : (deepseekResult.status === 'fulfilled' ? deepseekResult.value : qwenResult.value);
+    if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
+      return qwenResult.value;
+    } else if (deepseekResult.status === 'fulfilled') {
+      return deepseekResult.value;
+    } else {
+      throw new Error('No valid results available');
+    }
   }
 
   private async callVisionModel(model: string, item: RoutedItem, provider: 'openrouter' | 'openai'): Promise<SolverResult> {
