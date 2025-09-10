@@ -94,60 +94,67 @@ export class LLMClient {
     const modelMap = {
       'gpt-5': 'gpt-5',
       'gpt-5-thinking': 'gpt-5-thinking',
-      'o4-mini': 'o1-mini'
-    };
+      'o4-mini': 'o1-mini',
+    } as const;
 
     const actualModel = modelMap[model as keyof typeof modelMap] || model;
 
-    const isO1Family  = /^(o1|o3|o4)(-|$)/i.test(actualModel);   // e.g. o1, o1-mini, o4-mini
-    const isGPT5Family = /^gpt-5(\b|[-_])/i.test(actualModel);   // gpt-5, gpt-5-thinking, gpt-5-*
-    
-    // All models use chat completions format
+    // Robust family detection
+    const isOFamily   = /^(o1|o3|o4)(-|$)/i.test(actualModel);     // o1, o1-mini, o4-mini, etc.
+    const isGPT5Family = /^gpt-5(\b|[-_])/i.test(actualModel);     // gpt-5, gpt-5-thinking, gpt-5-*
+
+    // Flatten system+user for o*/gpt-5 (their chat behavior differs)
     let processedMessages = messages;
-    if (isO1Family) {
-      const systemMessage = messages.find(m => m.role === 'system');
-      const userMessage = messages.find(m => m.role === 'user');
-      
-      if (systemMessage && userMessage) {
-        processedMessages = [{
-          role: 'user',
-          content: `${systemMessage.content}\n\n${userMessage.content}`
-        }];
-      } else {
-        processedMessages = messages.filter(m => m.role !== 'system');
+    if (isOFamily || isGPT5Family) {
+      const sys = messages.find(m => m.role === 'system');
+      const usr = messages.find(m => m.role === 'user');
+      processedMessages = (sys && usr)
+        ? [{ role: 'user', content: `${this.extractTextContent(sys.content)}\n\n${this.extractTextContent(usr.content)}` }]
+        : messages.filter(m => m.role !== 'system');
+    }
+
+    // Decide max tokens once; accept either input name for convenience
+    const desiredMax = options.max_completion_tokens
+                    ?? options.max_tokens
+                    ?? this.config.max_tokens
+                    ?? 2000;
+
+    // --- Build payload by whitelist (no deletes, no spreading) ---
+    let requestBody: any;
+
+    if (isOFamily || isGPT5Family) {
+      requestBody = {
+        model: actualModel,
+        messages: processedMessages,
+        temperature: 1, // per OpenAI guidance for o*; keeps it deterministic-ish
+        max_completion_tokens: desiredMax,
+      };
+      if (options.reasoning_effort) {
+        requestBody.reasoning_effort = options.reasoning_effort;
+      }
+      // Explicit guard: never allow 'max_tokens' to exist for these models
+      if ('max_tokens' in requestBody) {
+        throw new Error('Internal guard: max_tokens set for reasoning model');
+      }
+    } else {
+      requestBody = {
+        model: actualModel,
+        messages: processedMessages,
+        temperature: options.temperature ?? this.config.temperature,
+        max_tokens: desiredMax,
+      };
+      if (options.tools) requestBody.tools = options.tools;
+      // Explicit guard: never allow max_completion_tokens on non-reasoning models
+      if ('max_completion_tokens' in requestBody) {
+        throw new Error('Internal guard: max_completion_tokens set for non-reasoning model');
       }
     }
-    
-    const requestBody: any = {
-      model: actualModel,
-      messages: processedMessages,
-      temperature: isO1Family ? 1 : (options.temperature || this.config.temperature)
-    };
-    
-    // optional: accept either option name on input
-    const desiredMax = options.max_completion_tokens ?? options.max_tokens ?? this.config.max_tokens ?? 2000;
 
-    if (isO1Family || isGPT5Family) {
-      delete requestBody.max_tokens;                // <- hard stop: never leak wrong key
-      requestBody.max_completion_tokens = desiredMax;
-    } else {
-      delete requestBody.max_completion_tokens;     // keep payload clean
-      requestBody.max_tokens = desiredMax;
+    // Optional: one-time payload sanity log
+    if (import.meta.env?.DEV) {
+      console.log('openai payload →', JSON.stringify(requestBody));
     }
 
-    // Add reasoning_effort for reasoning models
-    if ((isO1Family || isGPT5Family) && options.reasoning_effort) {
-      requestBody.reasoning_effort = options.reasoning_effort;
-    }
-    
-    // tools only for non-o1 / non-gpt-5
-    if (!isO1Family && !isGPT5Family && options.tools) {
-      requestBody.tools = options.tools;
-    }
-
-    // Optional dev logging to verify payload
-    if (import.meta.env?.DEV) console.log('openai payload →', JSON.stringify(requestBody));
-    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -158,14 +165,15 @@ export class LLMClient {
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+      // Surface OpenAI's error JSON so you can see EXACTLY what they didn't like
+      const err = await response.json().catch(() => null);
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText} - ${err ? JSON.stringify(err) : 'no body'}`);
     }
 
     const data = await response.json();
-    
     return {
-      content: data.choices[0].message.content,
-      usage: data.usage
+      content: data.choices[0]?.message?.content ?? '',
+      usage: data.usage,
     };
   }
 
