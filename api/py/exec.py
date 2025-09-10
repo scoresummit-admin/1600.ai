@@ -11,10 +11,16 @@ from fractions import Fraction
 import math
 import itertools
 import statistics
+import json
+import os
 
 # Set resource limits
-resource.setrlimit(resource.RLIMIT_CPU, (5, 5))  # 5 second CPU limit
-resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))  # 256MB memory limit
+try:
+    resource.setrlimit(resource.RLIMIT_CPU, (5, 5))  # 5 second CPU limit
+    resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))  # 256MB memory limit
+except (ImportError, OSError):
+    # Skip resource limits if not available (e.g., on Vercel)
+    pass
 
 def timeout_handler(signum, frame):
     raise TimeoutError("Execution timeout")
@@ -115,31 +121,87 @@ def execute_python(code, inputs=None):
 def handler(event, context):
     """Vercel serverless function handler"""
     try:
-        # Parse request body
-        if isinstance(event.get('body'), str):
-            body = json.loads(event['body'])
+        # Handle different input formats
+        if hasattr(event, 'get_json'):
+            # Flask-like request object
+            body = event.get_json()
+        elif isinstance(event, dict) and 'body' in event:
+            # Vercel event format
+            body_str = event['body']
+            if isinstance(body_str, str):
+                body = json.loads(body_str)
+            else:
+                body = body_str
+        elif hasattr(event, 'json'):
+            # Direct JSON access
+            body = event.json
         else:
-            body = event.get('body', {})
+            # Fallback - assume event is the body itself
+            body = event if isinstance(event, dict) else {}
         
         code = body.get('code', '')
         inputs = body.get('inputs', {})
         
         if not code:
-            return {
-                'statusCode': 400,
-                'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({'ok': False, 'error': 'No code provided'})
-            }
+            result = {'ok': False, 'error': 'No code provided'}
+        else:
+            result = execute_python(code, inputs)
         
-        result = execute_python(code, inputs)
-        
+        # Return in Vercel format
         return {
             'statusCode': 200,
-            'headers': {'Content-Type': 'application/json'},
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+            },
             'body': json.dumps(result)
         }
         
     except Exception as e:
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({
+                'ok': False,
+                'error': f"Handler error: {str(e)}"
+            })
+        }
+
+# Also support direct invocation for testing
+def main(request):
+    """Alternative handler for Google Cloud Functions style"""
+    if request.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        }
+        return ('', 204, headers)
+
+    try:
+        body = request.get_json()
+        code = body.get('code', '')
+        inputs = body.get('inputs', {})
+        
+        if not code:
+            result = {'ok': False, 'error': 'No code provided'}
+        else:
+            result = execute_python(code, inputs)
+            
+        headers = {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+        }
+        
+        return (json.dumps(result), 200, headers)
+        
+    except Exception as e:
+        headers = {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+        }
         return {
             'statusCode': 500,
             'headers': {'Content-Type': 'application/json'},
