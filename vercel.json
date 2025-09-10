@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/py/exec.py": {
-      "runtime": "python3.9"
+      "runtime": "python3.9@5.6.0"
     }
   },
   "rewrites": [
