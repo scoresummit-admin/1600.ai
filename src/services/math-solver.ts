@@ -204,7 +204,7 @@ export class MathSolver {
           }
         } else {
           // No majority - use domain preference
-          finalResult = this.selectByDomainPreference(item, votes, qwenResult, deepseekResult, mistralResult);
+          finalResult = this.selectByDomainPreference(item, votes, qwenResult.status === 'fulfilled' ? qwenResult : null, deepseekResult.status === 'fulfilled' ? deepseekResult : null, mistralResult);
           finalModel = finalResult.model;
         }
       } catch (error) {
