@@ -157,7 +157,7 @@ export class MathVerifier {
     console.log('Verifying substitution for item:', item.fullText.substring(0, 50));
     const verificationCode = `
 # Verify answer by substitution
-answer = ${answer}
+answer = "${answer}"
 # This is a placeholder - in a real implementation, we would parse the equation
 # and substitute the answer back to verify it satisfies the constraints
 result = True  # Assume valid for now
@@ -169,7 +169,7 @@ print(f"Substitution check: answer = {answer}")
       if (result.ok) {
         return { valid: true, notes: ['✓ Substitution check passed'] };
       } else {
-        return { valid: false, notes: ['✗ Substitution check failed'] };
+        return { valid: false, notes: [`✗ Substitution check failed: ${result.error}`] };
       }
     } catch (error) {
       return { valid: true, notes: ['✓ Substitution check skipped (no verification code)'] };
