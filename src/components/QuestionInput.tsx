@@ -28,7 +28,7 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
   const handleImageProcessed = (base64Data: string, questionText: string, extractedChoices: string[]) => {
     setIsProcessingImage(false);
     setImageBase64(base64Data);
-    setOcrText(questionText);
+    setOcrText(questionText || '');
     
     if (extractedChoices.length >= 3) {
       // Multiple choice question detected
