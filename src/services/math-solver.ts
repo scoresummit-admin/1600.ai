@@ -42,7 +42,7 @@ export class MathSolver {
     this.visionFallback = import.meta.env.VITE_VISION_FALLBACK || 'gpt-4o';
   }
 
-  async solve(item: RoutedItem, timeoutMs: number = 45000): Promise<SolverResult> {
+  async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
     const hasVision = item.hasFigure || !!item.imageBase64;
     
@@ -50,9 +50,9 @@ export class MathSolver {
     
     try {
       if (hasVision) {
-        return await this.solveVision(item, timeoutMs);
+        return await this.solveVision(item);
       } else {
-        return await this.solveTextEnsemble(item, timeoutMs);
+        return await this.solveTextEnsemble(item);
       }
     } catch (error) {
       console.error('Math solver error:', error);
@@ -63,7 +63,7 @@ export class MathSolver {
     }
   }
 
-  private async solveVision(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+  private async solveVision(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
     let modelUsed = '';
     let modelsTried: string[] = [];
@@ -108,7 +108,7 @@ export class MathSolver {
     throw new Error('All vision models failed or not configured');
   }
 
-  private async solveTextEnsemble(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+  private async solveTextEnsemble(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
     const modelsTried: string[] = [];
     const votes: ModelVote[] = [];

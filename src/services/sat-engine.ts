@@ -38,7 +38,11 @@ export class SATEngine {
         'claude-opus-4-1-20250805': 0,
         'claude-sonnet-4-20250514': 0,
         'gemini-2.5-pro': 0,
-        'qwen2.5-math-72b': 0
+        'qwen2.5-math-72b': 0,
+        'deepseek-r1': 0,
+        'mistral-large': 0,
+        'qwen2.5-vl': 0,
+        'gpt-4o': 0
       }
     };
   }
