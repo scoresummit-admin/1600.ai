@@ -100,7 +100,7 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error('Opus API error, trying Sonnet fallback:', error);
-      modelToUse = 'claude-sonnet-4-20250514';
+      modelToUse = 'claude-3-5-sonnet-20241022';
       response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -121,7 +121,7 @@ export default async function handler(req, res) {
     // If Opus returned 4xx due to availability, try Sonnet
     if (!response.ok && response.status >= 400 && response.status < 500 && modelToUse === 'claude-opus-4-1-20250805') {
       console.log('Opus unavailable (4xx), falling back to Sonnet 4...');
-      modelToUse = 'claude-sonnet-4-20250514';
+      modelToUse = 'claude-3-5-sonnet-20241022';
       response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: modelToUse,
         messages: messages.filter(m => m.role !== 'system'),
         system: messages.find(m => m.role === 'system')?.content,
         max_tokens,

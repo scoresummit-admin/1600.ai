@@ -35,7 +35,8 @@ export class SATEngine {
         'gpt-5': 0,
         'gpt-5-thinking': 0,
         'o4-mini': 0,
-        'claude-3.5-sonnet': 0,
+        'claude-opus-4-1-20250805': 0,
+        'claude-sonnet-4-20250514': 0,
         'gemini-2.5-pro': 0,
         'qwen2.5-math-72b': 0
       }
@@ -123,6 +124,7 @@ export class SATEngine {
         }
         
         this.metrics.model_usage['claude-3.5-sonnet']++;
+        this.metrics.model_usage['claude-opus-4-1-20250805']++;
         
       } else {
         // Math Pipeline: o4-mini → Python → Math Verifier

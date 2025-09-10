@@ -32,8 +32,8 @@ export class EBRWVerifier {
       
       // Combine verifier results
       const verifiers = [anthropic, gemini].filter(Boolean);
-      const agreementCount = verifiers.filter(v => v.topChoice === solverResult.final).length;
-      const avgScore = verifiers.length > 0 ? verifiers.reduce((sum, v) => sum + v.score, 0) / verifiers.length : 0;
+      const agreementCount = verifiers.filter(v => v!.topChoice === solverResult.final).length;
+      const avgScore = verifiers.length > 0 ? verifiers.reduce((sum, v) => sum + v!.score, 0) / verifiers.length : 0;
       
       // Enhanced passing criteria
       const passed = evidenceCheck.valid && 
@@ -51,19 +51,13 @@ export class EBRWVerifier {
         anthropic?.reasoning || gemini?.reasoning || 'No reasoning available'
       ];
       
-      // Flag for escalation if verifiers strongly disagree
-      const needsEscalation = anthropic && gemini && 
-                             (anthropic.topChoice !== gemini.topChoice) && 
-                             (Math.abs(anthropic.score - gemini.score) > 0.3);
-
       console.log(`🔍 EBRW verification completed in ${Date.now() - startTime}ms: ${passed ? 'PASSED' : 'FAILED'}`);
       
       return {
         passed,
         score,
         notes,
-        checks: ['evidence_verification', 'anthropic_opus', 'gemini_2.5_pro'],
-        needsEscalation
+        checks: ['evidence_verification', 'anthropic_opus', 'gemini_2.5_pro']
       };
       
     } catch (error) {

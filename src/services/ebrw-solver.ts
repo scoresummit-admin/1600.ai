@@ -76,7 +76,6 @@ export class EBRWSolver {
       
       console.log(`✅ EBRW solved: ${primaryResult.final} (${primaryResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
       return primaryResult;
-      
     } catch (error) {
       console.error('EBRW solver error:', error);
       throw error;
@@ -260,19 +259,5 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
       },
       model: 'gpt-5-thinking'
     };
-  }
-
-  private isAmbiguous(result: SolverResult): boolean {
-    // Check if elimination notes suggest close competition between options
-    const notes = result.meta.elimination_notes || {};
-    const noteValues = Object.values(notes);
-    
-    // Look for indicators of ambiguity in elimination notes
-    const ambiguityIndicators = ['close', 'similar', 'both', 'either', 'unclear', 'possible'];
-    return noteValues.some((note: any) => 
-      ambiguityIndicators.some(indicator => 
-        String(note).toLowerCase().includes(indicator)
-      )
-    );
   }
 }

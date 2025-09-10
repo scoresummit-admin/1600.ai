@@ -61,7 +61,8 @@ export class LLMClient {
       case 'o4-mini':
         return this.callOpenAI(model, messages, options);
       
-      case 'claude-3.5-sonnet':
+      case 'claude-opus-4-1-20250805':
+      case 'claude-sonnet-4-20250514':
         return this.callAnthropic(messages, options);
       
       case 'gemini-2.5-pro':
