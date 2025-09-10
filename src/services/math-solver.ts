@@ -199,11 +199,18 @@ export class MathSolver {
             finalResult = qwenResult.value;
           } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
             finalResult = deepseekResult.value;
-          } else {
+          } else if (mistralResult) {
             finalResult = mistralResult;
+          } else {
+            // Fallback to any available result
+            finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value : 
+                         deepseekResult.status === 'fulfilled' ? deepseekResult.value :
+                         (() => { throw new Error('No valid results available'); })();
           }
         } else {
           // No majority - use domain preference
+          const qwenValue = qwenResult.status === 'fulfilled' ? qwenResult.value : null;
+          const deepseekValue = deepseekResult.status === 'fulfilled' ? deepseekResult.value : null;
           const qwenValue = qwenResult.status === 'fulfilled' ? qwenResult.value : null;
           const deepseekValue = deepseekResult.status === 'fulfilled' ? deepseekResult.value : null;
           finalResult = this.selectByDomainPreference(item, votes, qwenValue, deepseekValue, mistralResult);
@@ -215,10 +222,13 @@ export class MathSolver {
         const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
         if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
           finalResult = qwenResult.value;
-        } else if (deepseekResult.status === 'fulfilled') {
+        } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
           finalResult = deepseekResult.value;
         } else {
-          throw new Error('No valid results from any model');
+          // Last resort fallback
+          finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value :
+                       deepseekResult.status === 'fulfilled' ? deepseekResult.value :
+                       (() => { throw new Error('No valid results from any model'); })();
         }
         finalModel = bestVote.model;
       }
