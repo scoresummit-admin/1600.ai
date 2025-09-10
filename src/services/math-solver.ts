@@ -196,15 +196,15 @@ export class MathSolver {
           
           // Return the result from the winning model
           if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' && qwenResult.value) {
-            finalResult = qwenResult.value;
+            finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value : deepseekResult.status === 'fulfilled' ? deepseekResult.value : mistralResult;
           } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled' && deepseekResult.value) {
-            finalResult = deepseekResult.value;
+            finalResult = deepseekResult.status === 'fulfilled' ? deepseekResult.value : mistralResult;
           } else {
             finalResult = mistralResult;
           }
         } else {
           // No majority - use domain preference
-          finalResult = this.selectByDomainPreference(item, votes, qwenResult, deepseekResult);
+          finalResult = this.selectByDomainPreference(item, votes, qwenResult, deepseekResult, mistralResult);
           finalModel = finalResult.model;
         }
       } catch (error) {
@@ -236,7 +236,8 @@ export class MathSolver {
     item: RoutedItem, 
     votes: ModelVote[], 
     qwenResult: PromiseSettledResult<SolverResult>, 
-    deepseekResult: PromiseSettledResult<SolverResult>
+    deepseekResult: PromiseSettledResult<SolverResult>,
+    mistralResult?: SolverResult
   ): SolverResult {
     // Prefer Qwen for algebra/advanced_math, DeepSeek for PSDA/geometry_trig
     const preferQwen = item.subdomain === 'algebra' || item.subdomain === 'advanced_math';
@@ -245,6 +246,8 @@ export class MathSolver {
       return qwenResult.value;
     } else if (!preferQwen && deepseekResult.status === 'fulfilled' && deepseekResult.value) {
       return deepseekResult.value;
+    } else if (mistralResult) {
+      return mistralResult;
     }
     
     // Fallback to highest confidence
@@ -252,9 +255,9 @@ export class MathSolver {
     if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
       return qwenResult.value;
     } else if (deepseekResult.status === 'fulfilled') {
-      return deepseekResult.value;
+      return deepseekResult.status === 'fulfilled' ? deepseekResult.value : mistralResult!;
     } else {
-      throw new Error('No valid results available');
+      return mistralResult || (() => { throw new Error('No valid results available'); })();
     }
   }
 

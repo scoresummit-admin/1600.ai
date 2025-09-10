@@ -116,7 +116,7 @@ export class SATEngine {
     routerOutput: any,
     choices: string[],
     startTime: number,
-    remainingTime: number,
+    _remainingTime: number,
     correctAnswer?: string
   ): Promise<SATSolutionLegacy> {
     console.log('📚 Solving EBRW question...', routerOutput.section, routerOutput.subdomain);
@@ -252,7 +252,7 @@ export class SATEngine {
   private async solveMath(
     routerOutput: any,
     startTime: number,
-    remainingTime: number,
+    _remainingTime: number,
     correctAnswer?: string
   ): Promise<SATSolutionLegacy> {
     console.log('🔢 Solving Math question...', routerOutput.section, routerOutput.subdomain);
