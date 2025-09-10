@@ -135,7 +135,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
       body: JSON.stringify({
         model: 'gpt-5',
         messages,
-        temperature: 0.1,
+        temperature: 1,
         max_completion_tokens: 2000,
       }),
     });

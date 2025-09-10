@@ -129,6 +129,7 @@ ${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => 
       body: JSON.stringify({
         model: 'o1-mini',
         messages,
+        temperature: 1,
         max_completion_tokens: 1000,
       }),
     });
