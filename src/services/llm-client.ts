@@ -94,13 +94,13 @@ export class LLMClient {
     const modelMap = {
       'gpt-5': 'gpt-5',  // Use actual GPT-5 when available
       'gpt-5-thinking': 'gpt-5-thinking',
-      'o4-mini': 'o4-mini'
+      'o4-mini': 'o1-mini'
     };
 
     const actualModel = modelMap[model as keyof typeof modelMap] || model;
 
-    // Only o1 models support reasoning_effort
-    const isO1Model = actualModel.startsWith('o1-') || actualModel === 'gpt-5-thinking' || actualModel === 'o4-mini';
+    // Models that use the newer parameter format
+    const isO1Model = actualModel.startsWith('o1-') || actualModel === 'gpt-5-thinking' || actualModel.includes('o1-mini');
     
     // o1 models don't support system messages - combine system and user messages
     let processedMessages = messages;
@@ -121,8 +121,7 @@ export class LLMClient {
     const requestBody: any = {
       model: actualModel,
       messages: processedMessages,
-      temperature: isO1Model ? 1 : (options.temperature || this.config.temperature),
-      max_tokens: isO1Model ? undefined : (options.max_tokens || 2000), // Generous token limits
+      temperature: isO1Model ? 1 : (options.temperature || this.config.temperature)
     };
     
     // Add reasoning_effort only for o1 models
@@ -133,7 +132,8 @@ export class LLMClient {
     // o1 models use max_completion_tokens instead of max_tokens
     if (isO1Model) {
       requestBody.max_completion_tokens = options.max_tokens || 2000;
-      delete requestBody.max_tokens;
+    } else {
+      requestBody.max_tokens = options.max_tokens || 2000;
     }
     
     // Add tools only for non-o1 models
