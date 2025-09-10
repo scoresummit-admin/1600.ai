@@ -181,9 +181,24 @@ Return compact JSON:
       });
     }
     
-    let content = data.candidates[0].content.parts[0].text;
+    // Handle MAX_TOKENS case - model hit output limit with no content
+    const candidate = data.candidates[0];
+    if (candidate.finishReason === 'MAX_TOKENS' && (!candidate.content.parts || candidate.content.parts.length === 0)) {
+      console.warn('Google API hit MAX_TOKENS with no output - increasing token budget');
+      return res.status(500).json({ 
+        error: 'Model hit token limit with no output',
+        details: {
+          finishReason: candidate.finishReason,
+          usageMetadata: data.usageMetadata,
+          suggestion: 'Increase maxOutputTokens parameter'
+        }
+      });
+    }
+
+    let content = candidate.content.parts[0].text;
     console.log('Raw Google API content:', content.substring(0, 200) + '...');
-    
+    if (!candidate.content.parts || !candidate.content.parts[0]) {
+    }
     // Strip any code block wrapping - return compact JSON always
     if (content.startsWith('```json')) {
       content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');

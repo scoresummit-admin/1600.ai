@@ -243,7 +243,7 @@ Return JSON:
           choices: item.choices,
           claimedChoice: solverResult.final,
           quotes: solverResult.meta.evidence || [],
-          maxOutputTokens: 1000,
+          maxOutputTokens: 4000,
           temperature: 0.1
         }),
         signal: AbortSignal.timeout(20000) // Increase to 20s

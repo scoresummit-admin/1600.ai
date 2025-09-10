@@ -181,7 +181,7 @@ export class SATRouter {
           mode: 'extract',
           imageBase64: imageBase64,
           temperature: 0.1,
-          maxOutputTokens: 2000
+          maxOutputTokens: 6000
         }),
         signal: controller.signal
       });
