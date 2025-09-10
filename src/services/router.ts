@@ -106,86 +106,107 @@ export class SATRouter {
   }
 
   private async extractWithOpenAI(imageBase64: string): Promise<{ text: string; choices: string[] }> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`
-              }
-            }
-          ]
-        }],
-        max_tokens: 1000,
-        temperature: 0.1
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-    if (!response.ok) {
-      throw new Error(`OpenAI Vision API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0].message.content;
-    
     try {
-      const parsed = JSON.parse(content);
-      const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
-      return {
-        text: fullText,
-        choices: parsed.choices || []
-      };
-    } catch {
-      return { text: content, choices: [] };
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${imageBase64}`
+                }
+              }
+            ]
+          }],
+          max_tokens: 2000,
+          temperature: 0.1
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`OpenAI Vision API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices[0].message.content;
+      
+      try {
+        const parsed = JSON.parse(content);
+        const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
+        return {
+          text: fullText,
+          choices: parsed.choices || []
+        };
+      } catch {
+        return { text: content, choices: [] };
+      }
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
     }
   }
 
   private async extractWithGemini(imageBase64: string): Promise<{ text: string; choices: string[] }> {
-    // Call our serverless function with proper image data
-    const response = await fetch('/api/google', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt: `Image data: data:image/jpeg;base64,${imageBase64}`,
-        mode: 'extract', // Use extract mode
-        imageBase64: imageBase64, // Send image data properly
-        temperature: 0.1,
-        maxOutputTokens: 2000 // Increase token limit
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Google API error: ${response.statusText} - ${errorData.error || 'Unknown error'}`);
-    }
-
-    const data = await response.json();
-    const content = data.content;
-    
     try {
-      const parsed = JSON.parse(content);
-      const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
-      return {
-        text: fullText,
-        choices: parsed.choices || []
-      };
-    } catch {
-      return { text: content, choices: [] };
+      // Call our serverless function with proper image data
+      const response = await fetch('/api/google', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'extract',
+          imageBase64: imageBase64,
+          temperature: 0.1,
+          maxOutputTokens: 2000
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Google API error: ${response.statusText} - ${errorData.error || 'Unknown error'}`);
+      }
+
+      const data = await response.json();
+      const content = data.content;
+      
+      try {
+        const parsed = JSON.parse(content);
+        const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
+        return {
+          text: fullText,
+          choices: parsed.choices || []
+        };
+      } catch {
+        return { text: content, choices: [] };
+      }
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
     }
   }
 
@@ -198,76 +219,87 @@ export class SATRouter {
     subdomain: EbrwDomain | MathDomain;
     hasFigure: boolean;
   }> {
-    let messages;
-    
-    if (imageBase64) {
-      // Image-first approach: send image with brief instruction
-      messages = [
-        { role: 'system', content: SYSTEM_ROUTER },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Classify this SAT question from the image. Analyze the question type and domain.'
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+    try {
+      let messages;
+      
+      if (imageBase64) {
+        // Image-first approach: send image with brief instruction
+        messages = [
+          { role: 'system', content: SYSTEM_ROUTER },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Classify this SAT question from the image. Analyze the question type and domain.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${imageBase64}`
+                }
               }
-            }
-          ]
-        }
-      ];
-    } else {
-      // Fallback to text-based classification
-      const userPrompt = `Question: ${promptText}
+            ]
+          }
+        ];
+      } else {
+        // Fallback to text-based classification
+        const userPrompt = `Question: ${promptText}
 
 Choices:
 ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+        
+        messages = [
+          { role: 'system', content: SYSTEM_ROUTER },
+          { role: 'user', content: userPrompt }
+        ];
+      }
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages,
+          temperature: 0.1,
+          max_tokens: 800,
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      let content = data.choices[0].message.content.trim();
       
-      messages = [
-        { role: 'system', content: SYSTEM_ROUTER },
-        { role: 'user', content: userPrompt }
-      ];
+      // Handle JSON markdown wrapper
+      if (content.startsWith('```json')) {
+        content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
+      } else if (content.startsWith('```')) {
+        content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
+      }
+      
+      const result = JSON.parse(content);
+      
+      return {
+        section: result.section,
+        subdomain: result.subdomain,
+        hasFigure: result.hasFigure || false
+      };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
     }
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages,
-        temperature: 0.1,
-        max_tokens: 800,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    let content = data.choices[0].message.content.trim();
-    
-    // Handle JSON markdown wrapper
-    if (content.startsWith('```json')) {
-      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (content.startsWith('```')) {
-      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
-    }
-    
-    const result = JSON.parse(content);
-    
-    return {
-      section: result.section,
-      subdomain: result.subdomain,
-      hasFigure: result.hasFigure || false
-    };
   }
 
   private cleanText(text: string): string {
