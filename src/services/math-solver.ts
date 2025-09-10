@@ -78,33 +78,36 @@ export class MathSolver {
   private async solvePrimary(item: RoutedItem, timeoutMs = 14000): Promise<SolverResult> {
     console.log('Math solver primary timeout:', timeoutMs); // Use the parameter
     
+    const isO1Model = true; // Since we're using o1-mini, always flatten system messages
+    
     let messages;
     
     if (item.imageBase64) {
       // Image-first approach
-      messages = [
-        { role: 'system', content: SYSTEM_MATH },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Domain: ${item.subdomain}
+      const userContent = `${SYSTEM_MATH}
+
+Domain: ${item.subdomain}
 ${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
 
 Extract and solve this SAT math question from the image. Pay attention to any graphs, diagrams, or figures. Generate Python code to compute the exact answer.
 
-${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}`
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${item.imageBase64}`
-              }
+${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}`;
+      
+      messages = [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: userContent
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${item.imageBase64}`
             }
-          ]
-        }
-      ];
+          }
+        ]
+      }];
     } else {
       // Fallback to text-based approach
       const userPrompt = `Domain: ${item.subdomain}
@@ -114,9 +117,9 @@ ${item.fullText}
 
 ${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` : ''}`;
       
+      // Flatten system message into user message for o1-mini
       messages = [
-        { role: 'system', content: SYSTEM_MATH },
-        { role: 'user', content: userPrompt }
+        { role: 'user', content: `${SYSTEM_MATH}\n\n${userPrompt}` }
       ];
     }
 
