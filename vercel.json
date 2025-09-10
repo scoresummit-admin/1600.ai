@@ -1,29 +1,18 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-
   "functions": {
     "api/py/exec.py": {
-      "runtime": "python3.11",
-      "memory": 256,
-      "maxDuration": 10
+      "runtime": "python3.11"
     }
   },
-
   "rewrites": [
-    { "source": "/api/py/exec", "destination": "/api/py/exec.py" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
-
-  "headers": [
+    {
+      "source": "/api/py/exec",
+      "destination": "/api/py/exec.py"
+    },
     {
       "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" }
-      ]
+      "destination": "/index.html"
     }
   ]
 }
