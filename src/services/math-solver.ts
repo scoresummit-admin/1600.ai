@@ -194,11 +194,11 @@ export class MathSolver {
           const bestVote = majority[1].votes.sort((a, b) => b.confidence - a.confidence)[0];
           finalModel = bestVote.model;
           
-          // Return the result from the winning model
-          if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' && qwenResult.value) {
-            finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value : deepseekResult.status === 'fulfilled' ? deepseekResult.value : mistralResult;
-          } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled' && deepseekResult.value) {
-            finalResult = deepseekResult.status === 'fulfilled' ? deepseekResult.value : mistralResult;
+          // Return the result from the winning model  
+          if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
+            finalResult = qwenResult.value;
+          } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
+            finalResult = deepseekResult.value;
           } else {
             finalResult = mistralResult;
           }
