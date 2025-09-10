@@ -66,14 +66,14 @@ export class LLMClient {
         return this.callAnthropic(messages, options);
       
       case 'gemini-2.5-pro':
-        const systemMessage = messages.find(m => m.role === 'system')?.content || '';
-        const userMessage = messages.find(m => m.role === 'user')?.content || '';
+        const systemMessage = this.extractTextContent(messages.find(m => m.role === 'system')?.content) || '';
+        const userMessage = this.extractTextContent(messages.find(m => m.role === 'user')?.content) || '';
         const fullPrompt = systemMessage ? `${systemMessage}\n\n${userMessage}` : userMessage;
         return this.callGemini(fullPrompt, options);
       
       case 'qwen2.5-math-72b':
-        const sysMsg = messages.find(m => m.role === 'system')?.content || '';
-        const usrMsg = messages.find(m => m.role === 'user')?.content || '';
+        const sysMsg = this.extractTextContent(messages.find(m => m.role === 'system')?.content) || '';
+        const usrMsg = this.extractTextContent(messages.find(m => m.role === 'user')?.content) || '';
         const qwenPrompt = sysMsg ? `${sysMsg}\n\n${usrMsg}` : usrMsg;
         return this.callQwen(qwenPrompt, options);
       
@@ -305,5 +305,20 @@ export class LLMClient {
 
   updateConfig(newConfig: Partial<ModelConfig>) {
     this.config = { ...this.config, ...newConfig };
+  }
+
+  private extractTextContent(content: string | Array<any> | undefined): string {
+    if (!content) return '';
+    if (typeof content === 'string') return content;
+    
+    // Extract text from array content (for multi-modal messages)
+    if (Array.isArray(content)) {
+      return content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join(' ');
+    }
+    
+    return '';
   }
 }
