@@ -160,7 +160,7 @@ export class MathSolver {
       } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
         finalResult = deepseekResult.value;
       } else {
-        finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value : deepseekResult.value as SolverResult;
+        finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value : (deepseekResult as PromiseFulfilledResult<SolverResult>).value;
       }
       finalModel = bestVote.model;
     } else {
@@ -202,41 +202,33 @@ export class MathSolver {
           } else if (mistralResult) {
             finalResult = mistralResult;
           } else {
-            // Fallback to any available result
-            if (qwenResult.status === 'fulfilled') {
-              finalResult = qwenResult.value;
-            } else if (deepseekResult.status === 'fulfilled') {
-              finalResult = deepseekResult.value;
-            } else {
-              throw new Error('No valid results available');
-            }
+            throw new Error('No valid results available');
           }
         } else {
           // No majority - use domain preference
           if (qwenResult.status === 'fulfilled') {
             finalResult = qwenResult.value;
+            finalModel = this.qwenTextModel;
           } else if (deepseekResult.status === 'fulfilled') {
             finalResult = deepseekResult.value;
+            finalModel = this.deepseekTextModel;
           } else {
             throw new Error('No valid results from any model');
           }
-          finalModel = finalResult.model;
         }
       } catch (error) {
         console.warn(`Mistral tiebreaker failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         // Fall back to highest confidence
         const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
+        finalModel = bestVote.model;
+        
         if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
           finalResult = qwenResult.value;
         } else if (bestVote.model === this.deepseekTextModel && deepseekResult.status === 'fulfilled') {
           finalResult = deepseekResult.value;
         } else {
-          // Last resort fallback
-          finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value :
-                       deepseekResult.status === 'fulfilled' ? deepseekResult.value :
-                       (() => { throw new Error('No valid results from any model'); })();
+          throw new Error('No valid results from any model');
         }
-        finalModel = bestVote.model;
       }
     }
 
@@ -247,41 +239,7 @@ export class MathSolver {
     const latencyMs = Date.now() - startTime;
     console.log(`{router: 'text', modelsTried: [${modelsTried.join(', ')}], finalModel: '${finalModel}', is_gridin: ${item.isGridIn}, latencyMs: ${latencyMs}}`);
 
-        if (qwenResult.status === 'fulfilled') {
-          finalResult = qwenResult.value;
-        } else if (deepseekResult.status === 'fulfilled') {
-          finalResult = deepseekResult.value;
-        } else {
-          throw new Error('No valid results from any model');
-        }
-  }
-  private selectByDomainPreference(
-    item: RoutedItem, 
-    votes: ModelVote[], 
-    qwenResult: SolverResult | null, 
-    deepseekResult: SolverResult | null,
-    mistralResult?: SolverResult
-  ): SolverResult {
-    // Prefer Qwen for algebra/advanced_math, DeepSeek for PSDA/geometry_trig
-    const preferQwen = item.subdomain === 'algebra' || item.subdomain === 'advanced_math';
-    
-    if (preferQwen && qwenResult) {
-      return qwenResult;
-    } else if (!preferQwen && deepseekResult) {
-      return deepseekResult;
-    } else if (mistralResult) {
-      return mistralResult;
-    }
-    
-    // Fallback to highest confidence
-    const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
-    if (bestVote.model === this.qwenTextModel && qwenResult) {
-      return qwenResult;
-    } else if (deepseekResult) {
-      return deepseekResult;
-    } else {
-      return mistralResult || (() => { throw new Error('No valid results available'); })();
-    }
+    return finalResult;
   }
 
   private async callVisionModel(model: string, item: RoutedItem, provider: 'openrouter' | 'openai'): Promise<SolverResult> {
