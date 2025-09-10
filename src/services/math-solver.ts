@@ -78,8 +78,6 @@ export class MathSolver {
   private async solvePrimary(item: RoutedItem, timeoutMs = 14000): Promise<SolverResult> {
     console.log('Math solver primary timeout:', timeoutMs); // Use the parameter
     
-    const isO1Model = true; // Since we're using o1-mini, always flatten system messages
-    
     let messages;
     
     if (item.imageBase64) {
