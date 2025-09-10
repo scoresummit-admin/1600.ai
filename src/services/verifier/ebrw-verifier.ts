@@ -1,5 +1,12 @@
 import { RoutedItem, SolverResult, VerifierReport } from '../../../types/sat';
 
+interface VerifierResult {
+  source: 'anthropic' | 'gemini';
+  topChoice: string;
+  score: number;
+  reasoning: string;
+}
+
 export class EBRWVerifier {
   constructor() {}
 
@@ -14,21 +21,40 @@ export class EBRWVerifier {
         item.ocrText || item.fullText
       );
       
-      // Independent verification with Claude
-      const independentResult = await this.independentVerification(item, solverResult);
+      // Parallel verification with both Anthropic Opus and Gemini
+      const [anthropicResult, geminiResult] = await Promise.allSettled([
+        this.anthropicVerification(item, solverResult),
+        this.geminiVerification(item, solverResult)
+      ]);
       
+      const anthropic = anthropicResult.status === 'fulfilled' ? anthropicResult.value : null;
+      const gemini = geminiResult.status === 'fulfilled' ? geminiResult.value : null;
+      
+      // Combine verifier results
+      const verifiers = [anthropic, gemini].filter(Boolean);
+      const agreementCount = verifiers.filter(v => v.topChoice === solverResult.final).length;
+      const avgScore = verifiers.length > 0 ? verifiers.reduce((sum, v) => sum + v.score, 0) / verifiers.length : 0;
+      
+      // Enhanced passing criteria
       const passed = evidenceCheck.valid && 
-                    independentResult.topChoice === solverResult.final &&
-                    independentResult.score >= 0.7;
+                    (agreementCount >= 1) &&  // At least one verifier agrees
+                    avgScore >= 0.7 &&
+                    !(anthropic && gemini && anthropic.topChoice !== gemini.topChoice && Math.abs(anthropic.score - gemini.score) > 0.3); // No strong disagreement
       
-      const score = passed ? Math.min(0.95, independentResult.score) : independentResult.score * 0.6;
+      const score = passed ? Math.min(0.95, avgScore + 0.1) : Math.max(0.3, avgScore * 0.7);
       
       const notes = [
         ...evidenceCheck.notes,
-        `Independent verifier chose: ${independentResult.topChoice}`,
-        `Verifier confidence: ${independentResult.score.toFixed(2)}`,
-        independentResult.reasoning
+        anthropic ? `Anthropic Opus chose: ${anthropic.topChoice} (${anthropic.score.toFixed(2)})` : 'Anthropic verification failed',
+        gemini ? `Gemini chose: ${gemini.topChoice} (${gemini.score.toFixed(2)})` : 'Gemini verification failed',
+        `Agreement: ${agreementCount}/${verifiers.length} verifiers`,
+        anthropic?.reasoning || gemini?.reasoning || 'No reasoning available'
       ];
+      
+      // Flag for escalation if verifiers strongly disagree
+      const needsEscalation = anthropic && gemini && 
+                             (anthropic.topChoice !== gemini.topChoice) && 
+                             (Math.abs(anthropic.score - gemini.score) > 0.3);
 
       console.log(`🔍 EBRW verification completed in ${Date.now() - startTime}ms: ${passed ? 'PASSED' : 'FAILED'}`);
       
@@ -36,7 +62,8 @@ export class EBRWVerifier {
         passed,
         score,
         notes,
-        checks: ['evidence_verification', 'independent_judge']
+        checks: ['evidence_verification', 'anthropic_opus', 'gemini_2.5_pro'],
+        needsEscalation
       };
       
     } catch (error) {
@@ -48,6 +75,61 @@ export class EBRWVerifier {
         checks: ['error']
       };
     }
+  }
+
+  async deepPassVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
+    console.log('🔍 Running deep pass verification with Anthropic Opus...');
+    
+    const deepPrompt = `You are conducting a deep analysis pass of this SAT EBRW question. 
+
+Previous solver chose: ${solverResult.final}
+Evidence provided: ${JSON.stringify(solverResult.meta.evidence)}
+
+Conduct thorough analysis and provide detailed scoring.`;
+
+    try {
+      const response = await fetch('/api/anthropic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: "You are an expert SAT EBRW analyzer. Provide detailed, careful analysis.",
+          messages: [{
+            role: 'user',
+            content: item.imageBase64 ? [
+              { type: 'text', text: deepPrompt },
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: this.detectMimeType(item.imageBase64),
+                  data: item.imageBase64
+                }
+              }
+            ] : deepPrompt
+          }],
+          max_tokens: 2000,
+          temperature: 0.05,
+          fullText: item.fullText,
+          imageBase64: item.imageBase64
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const parsed = this.parseVerifierResponse(data.content);
+        return {
+          source: 'anthropic',
+          topChoice: parsed.best_choice,
+          score: parsed.scores[solverResult.final] || 0,
+          reasoning: parsed.reasoning + ' (Deep pass)'
+        };
+      }
+    } catch (error) {
+      console.warn('Deep pass verification failed:', error);
+    }
+
+    return this.fallbackVerification(solverResult, 'anthropic');
   }
 
   private verifyEvidence(evidence: string[], passageText: string): { valid: boolean; notes: string[] } {
@@ -82,36 +164,19 @@ export class EBRWVerifier {
     return { valid, notes };
   }
 
-  private async independentVerification(item: RoutedItem, solverResult: SolverResult): Promise<{
-    topChoice: string;
-    score: number;
-    reasoning: string;
-  }> {
-    // Detect MIME type from base64 data
-    const detectMimeType = (base64Data: string): string => {
-      if (base64Data.startsWith('iVBORw0KGgo')) {
-        return 'image/png';
-      } else if (base64Data.startsWith('/9j/')) {
-        return 'image/jpeg';
-      }
-      // Default to PNG if uncertain (most screenshots are PNG)
-      return 'image/png';
-    };
-
-    let messages;
-    
-    if (item.imageBase64) {
-      const mimeType = detectMimeType(item.imageBase64);
-      console.log(`🔍 Detected image type: ${mimeType} for base64 starting with: ${item.imageBase64.substring(0, 20)}...`);
-      
-      // Image-first approach for verification
-      messages = [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Analyze this SAT EBRW question from the image and score each answer choice.
+  private async anthropicVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
+    try {
+      const response = await fetch('/api/anthropic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: "You are an independent SAT EBRW judge. Analyze questions accurately and provide scoring.",
+          messages: [{
+            role: 'user',
+            content: item.imageBase64 ? [
+              {
+                type: 'text',
+                text: `Analyze this SAT EBRW question from the image and score each answer choice.
 
 ${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}
 
@@ -123,96 +188,122 @@ Return JSON:
   "best_choice": "A|B|C|D", 
   "reasoning": "Brief explanation for your choice"
 }`
-            },
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: item.imageBase64
+              },
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: this.detectMimeType(item.imageBase64),
+                  data: item.imageBase64
+                }
               }
-            }
-          ]
-        }
-      ];
-    } else {
-      // Fallback to text-based verification
-      const userPrompt = `${item.fullText}
+            ] : `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
 
-${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
-      
-      messages = [
-        { 
-          role: 'user', 
-          content: `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
+${item.fullText}
 
-${userPrompt}
+${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}
 
 Return JSON:
 {
   "scores": {"A": 0.0-1.0, "B": 0.0-1.0, "C": 0.0-1.0, "D": 0.0-1.0},
   "best_choice": "A|B|C|D",
   "reasoning": "Brief explanation for your choice"
-}` 
-        }
-      ];
-    }
-
-    try {
-      console.log('📡 Making Anthropic API call for EBRW verification...');
-      // Call our serverless function instead of Anthropic directly
-      const response = await fetch('/api/anthropic', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          system: "You are an independent SAT EBRW judge. Analyze questions accurately and provide scoring.",
-          messages,
-          max_tokens: 500,
+}`
+          }],
+          max_tokens: 1000,
           temperature: 0.1,
+          fullText: item.fullText,
+          imageBase64: item.imageBase64
         }),
-        signal: AbortSignal.timeout(15000), // 15 second timeout
+        signal: AbortSignal.timeout(10000)
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Anthropic API error:', response.status, response.statusText, errorData);
-        console.warn(`Anthropic API error (${response.status}): ${response.statusText} - ${errorData.error}`);
-        return this.fallbackVerification(solverResult);
+      if (response.ok) {
+        const data = await response.json();
+        const parsed = this.parseVerifierResponse(data.content);
+        return {
+          source: 'anthropic',
+          topChoice: parsed.best_choice,
+          score: parsed.scores[solverResult.final] || 0,
+          reasoning: parsed.reasoning
+        };
+      } else {
+        console.warn('Anthropic verification failed:', response.status);
       }
-
-      const data = await response.json();
-      console.log('✅ Anthropic API response received');
-      let content = data.content.trim();
-      
-      // Handle JSON markdown wrapper
-      if (content.startsWith('```json')) {
-        content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
-      } else if (content.startsWith('```')) {
-        content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
-      }
-      
-      const result = JSON.parse(content);
-      const proposedScore = result.scores[solverResult.final] || 0;
-      
-      return {
-        topChoice: result.best_choice,
-        score: proposedScore,
-        reasoning: result.reasoning
-      };
-      
     } catch (error) {
-      console.warn('Independent verification failed:', error);
-      return this.fallbackVerification(solverResult);
+      console.warn('Anthropic verification error:', error);
+    }
+
+    return this.fallbackVerification(solverResult, 'anthropic');
+  }
+
+  private async geminiVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
+    try {
+      const response = await fetch('/api/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'verify',
+          imageBase64: item.imageBase64,
+          ocrText: item.ocrText || item.fullText,
+          choices: item.choices,
+          claimedChoice: solverResult.final,
+          quotes: solverResult.meta.evidence || [],
+          maxOutputTokens: 1000,
+          temperature: 0.1
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const parsed = this.parseVerifierResponse(data.content);
+        return {
+          source: 'gemini',
+          topChoice: parsed.best_choice,
+          score: parsed.scores[solverResult.final] || 0,
+          reasoning: parsed.reasoning
+        };
+      } else {
+        console.warn('Gemini verification failed:', response.status);
+      }
+    } catch (error) {
+      console.warn('Gemini verification error:', error);
+    }
+
+    return this.fallbackVerification(solverResult, 'gemini');
+  }
+
+  private detectMimeType(base64Data: string): string {
+      if (base64Data.startsWith('iVBORw0KGgo')) {
+        return 'image/png';
+      } else if (base64Data.startsWith('/9j/')) {
+        return 'image/jpeg';
+      }
+      return 'image/png';
+  }
+
+  private parseVerifierResponse(content: string): any {
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith('```json')) {
+      cleanContent = cleanContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    } else if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/```\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    try {
+      return JSON.parse(cleanContent);
+    } catch (error) {
+      console.warn('Failed to parse verifier response:', error);
+      return {
+        scores: { A: 0.5, B: 0.5, C: 0.5, D: 0.5 },
+        best_choice: 'A',
+        reasoning: 'Parse error occurred'
+      };
     }
   }
 
-  private fallbackVerification(solverResult: SolverResult): {
-    topChoice: string;
-    score: number;
-    reasoning: string;
-  } {
+  private fallbackVerification(solverResult: SolverResult, source: 'anthropic' | 'gemini'): VerifierResult {
     // Basic heuristic verification based on confidence and evidence quality
     let score = solverResult.confidence;
     
@@ -228,9 +319,10 @@ Return JSON:
     }
     
     return {
+      source,
       topChoice: solverResult.final,
       score: Math.max(0.3, Math.min(0.9, score)),
-      reasoning: 'Fallback verification based on solver confidence and evidence quality'
+      reasoning: `Fallback ${source} verification based on solver confidence and evidence quality`
     };
   }
 }

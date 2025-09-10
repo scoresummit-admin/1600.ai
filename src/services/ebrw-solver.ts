@@ -49,20 +49,28 @@ export class EBRWSolver {
     
     try {
       // Primary solve with GPT-5 (low effort)
-      const primaryResult = await this.solvePrimary(item, timeoutMs * 0.8);
+      const primaryResult = await this.solvePrimary(item, timeoutMs * 0.7);
       
       // Check if escalation is needed
-      if (primaryResult.confidence < 0.72 || this.isAmbiguous(primaryResult)) {
+      if (primaryResult.confidence < 0.75) {
         console.log('🔄 EBRW escalating to GPT-5-Thinking...');
         try {
-          const escalatedResult = await this.solveEscalated(item, timeoutMs * 0.2);
+          const escalatedResult = await this.solveEscalated(item, timeoutMs * 0.3);
           
           // Return the higher confidence result
-          const finalResult = escalatedResult.confidence > primaryResult.confidence ? escalatedResult : primaryResult;
+          const finalResult = {
+            ...escalatedResult,
+            meta: {
+              ...escalatedResult.meta,
+              primaryResult: primaryResult.final,
+              escalated: true
+            }
+          };
           console.log(`✅ EBRW solved with escalation: ${finalResult.final} (${finalResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
           return finalResult;
         } catch (error) {
           console.warn('EBRW escalation failed:', error);
+          primaryResult.meta.escalationFailed = true;
         }
       }
       
@@ -75,7 +83,7 @@ export class EBRWSolver {
     }
   }
 
-  private async solvePrimary(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
+  private async solvePrimary(item: RoutedItem, timeoutMs = 12000): Promise<SolverResult> {
     console.log('🔄 EBRW primary solver starting with timeout:', timeoutMs);
     
     let messages;
@@ -126,10 +134,10 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5',
         messages,
         temperature: 0.1,
-        max_tokens: 1000,
+        max_tokens: 2000,
       }),
     });
 
@@ -165,7 +173,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
   }
 
   private async solveEscalated(item: RoutedItem, timeoutMs = 10000): Promise<SolverResult> {
-    console.log('EBRW solver escalated timeout:', timeoutMs); // Use the parameter
+    console.log('🔄 EBRW escalated solver starting with timeout:', timeoutMs);
     
     let messages;
     
@@ -217,10 +225,10 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'o1-preview',
+        model: 'gpt-5-thinking',
         messages,
-        max_completion_tokens: 1000,
-        reasoning_effort: 'medium'
+        max_completion_tokens: 3000,
+        reasoning_effort: 'high'
       }),
     });
 
@@ -242,7 +250,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
     
     return {
       final: result.final_choice,
-      confidence: Math.min(0.95, result.confidence_0_1 + 0.1), // Boost confidence for escalated results
+      confidence: Math.min(0.98, result.confidence_0_1 + 0.15), // Boost confidence for deep reasoning
       meta: {
         domain: result.domain,
         explanation: result.short_explanation,
