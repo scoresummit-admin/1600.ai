@@ -268,7 +268,7 @@ export class SATEngine {
     
     try {
       // Primary solve with o4-mini
-      const primaryResult = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.7, 18000));
+      const primaryResult = await this.mathSolver.solve(routerOutput);
       
       // Convert SolverResult to MathSolution
       const primarySolution = {
@@ -293,7 +293,7 @@ export class SATEngine {
       // Second opinion if confidence is low or verification failed
       if (primarySolution.confidence_0_1 < 0.9 || !primaryVerification.passed) {
         try {
-          const secondResult = await this.mathSolver.solve(routerOutput, Math.min(remainingTime * 0.25, 12000));
+          const secondResult = await this.mathSolver.solve(routerOutput);
           
           // Convert SolverResult to MathSolution
           const secondSolution = {
@@ -321,7 +321,7 @@ export class SATEngine {
       // Google Gemini for additional mathematical verification
       if (solutions.length > 1 || primarySolution.confidence_0_1 < 0.85) {
         try {
-          const geminiResult = await this.mathSolver.solve(routerOutput, 8000);
+          const geminiResult = await this.mathSolver.solve(routerOutput);
           
           // Convert SolverResult to MathSolution
           const geminiSolution = {

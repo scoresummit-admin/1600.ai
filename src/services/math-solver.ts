@@ -207,7 +207,7 @@ export class MathSolver {
         // Fall back to highest confidence
         const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
         finalResult = bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' ? 
-          qwenResult.value : deepseekResult.value as SolverResult;
+          qwenResult.value : (deepseekResult.status === 'fulfilled' ? deepseekResult.value : qwenResult.value);
         finalModel = bestVote.model;
       }
     }
@@ -240,7 +240,7 @@ export class MathSolver {
     // Fallback to highest confidence
     const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
     return bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled' ? 
-      qwenResult.value : deepseekResult.value as SolverResult;
+      qwenResult.value : (deepseekResult.status === 'fulfilled' ? deepseekResult.value : qwenResult.value);
   }
 
   private async callVisionModel(model: string, item: RoutedItem, provider: 'openrouter' | 'openai'): Promise<SolverResult> {

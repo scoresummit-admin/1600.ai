@@ -136,7 +136,7 @@ export class SATEngine {
         
         try {
           solverResult = await Promise.race([
-            this.mathSolver.solve(routedItem, Math.min(remainingTime * 0.7, 50000)), // Up to 50s
+            this.mathSolver.solve(routedItem), // Math solver handles its own timeouts
             new Promise<never>((_, reject) => 
               setTimeout(() => reject(new Error('Math solver timeout')), 50000)
             )
