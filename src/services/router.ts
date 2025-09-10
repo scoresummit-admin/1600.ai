@@ -166,9 +166,11 @@ export class SATRouter {
 
   private async extractWithGemini(imageBase64: string): Promise<{ text: string; choices: string[] }> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // Increase to 60s timeout
 
     try {
+      console.log('🔄 Starting Gemini OCR extraction...');
+      
       // Call our serverless function with proper image data
       const response = await fetch('/api/google', {
         method: 'POST',
@@ -185,14 +187,19 @@ export class SATRouter {
       });
 
       clearTimeout(timeoutId);
+      
+      console.log(`📡 Gemini API response status: ${response.status}`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Google API error: ${response.statusText} - ${errorData.error || 'Unknown error'}`);
+        console.error('❌ Gemini API error:', response.status, response.statusText, errorData);
+        throw new Error(`Google API error: ${response.statusText} - ${errorData.error || 'Unknown error'} - ${errorData.details || ''}`);
       }
 
       const data = await response.json();
       const content = data.content;
+      
+      console.log('✅ Gemini OCR completed, processing response...');
       
       try {
         const parsed = JSON.parse(content);
@@ -202,10 +209,12 @@ export class SATRouter {
           choices: parsed.choices || []
         };
       } catch {
+        console.warn('⚠️ Failed to parse Gemini JSON response, using raw content');
         return { text: content, choices: [] };
       }
     } catch (error) {
       clearTimeout(timeoutId);
+      console.error('❌ Gemini extraction failed:', error.message);
       throw error;
     }
   }
