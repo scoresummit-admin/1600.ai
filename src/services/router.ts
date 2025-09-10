@@ -183,7 +183,7 @@ Image data: data:image/jpeg;base64,${imageBase64}`,
   private async classifyQuestion(promptText: string, choices: string[]): Promise<{
     section: Section;
     subdomain: EbrwDomain | MathDomain;
-    normalizedPrompt?: string;
+    hasFigure: boolean;
   }> {
     const userPrompt = `Question: ${promptText}
 
@@ -253,7 +253,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       return {
         section: 'MATH',
         subdomain: 'algebra' as MathDomain,
-        normalizedPrompt: this.cleanText(item.promptText || ''),
+        fullText: this.cleanText(item.promptText || ''),
         choices,
         isGridIn: choices.length === 0,
         hasFigure: false

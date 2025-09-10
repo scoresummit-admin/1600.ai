@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, FileText, Calculator, Image } from 'lucide-react';
+import { Send, Image } from 'lucide-react';
 import { ImageUpload } from './ImageUpload';
 
 interface QuestionInputProps {
@@ -10,7 +10,6 @@ interface QuestionInputProps {
 export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoading }) => {
   const [question, setQuestion] = useState('');
   const [choices, setChoices] = useState(['', '', '', '']);
-  const [correctAnswer, setCorrectAnswer] = useState('');
   const [questionType, setQuestionType] = useState<'multiple-choice' | 'grid-in'>('multiple-choice');
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [hasProcessedImage, setHasProcessedImage] = useState(false);
@@ -22,7 +21,7 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
       ? choices.filter(choice => choice.trim()) 
       : [];
     
-    onSubmit(question, validChoices, correctAnswer || undefined);
+    onSubmit(question, validChoices);
   };
 
   const handleImageProcessed = (questionText: string, extractedChoices: string[]) => {
