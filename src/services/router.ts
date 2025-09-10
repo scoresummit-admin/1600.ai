@@ -196,6 +196,7 @@ Image data: data:image/jpeg;base64,${imageBase64}`,
     subdomain: EbrwDomain | MathDomain;
     hasFigure: boolean;
   }> {
+  }
   private async classifyQuestion(
     promptText: string, 
     choices: string[], 
