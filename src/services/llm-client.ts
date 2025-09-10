@@ -20,7 +20,7 @@ export class LLMClient {
 
   async callModel(
     model: ModelName,
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | Array<any> }>,
     options: {
       temperature?: number;
       max_tokens?: number;
@@ -52,7 +52,7 @@ export class LLMClient {
 
   private async makeRequest(
     model: ModelName,
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | Array<any> }>,
     options: any
   ): Promise<{ content: string; usage?: any }> {
     switch (model) {
@@ -84,7 +84,7 @@ export class LLMClient {
 
   private async callOpenAI(
     model: ModelName,
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | Array<any> }>,
     options: any
   ): Promise<{ content: string; usage?: any }> {
     if (!this.config.openai_api_key) {
@@ -114,14 +114,15 @@ export class LLMClient {
       const input: any[] = [];
       
       for (const message of messages) {
-        if (typeof message.content === 'string') {
+        const content = message.content;
+        if (typeof content === 'string') {
           input.push({
             type: 'text',
-            text: message.content
+            text: content
           });
-        } else if (Array.isArray(message.content)) {
+        } else if (Array.isArray(content)) {
           // Handle image content for multi-modal messages
-          for (const part of message.content) {
+          for (const part of content) {
             if (part.type === 'text') {
               input.push({
                 type: 'text',
@@ -222,7 +223,7 @@ export class LLMClient {
   }
 
   private async callAnthropic(
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | Array<any> }>,
     options: any
   ): Promise<{ content: string; usage?: any }> {
     // Call our serverless function instead of Anthropic directly
