@@ -99,102 +99,49 @@ export class LLMClient {
 
     const actualModel = modelMap[model as keyof typeof modelMap] || model;
 
-    // Models that use the newer parameter format
     const isO1Model = actualModel.startsWith('o1-') || actualModel === 'gpt-5-thinking' || actualModel.includes('o1-mini');
     const isGPT5Model = actualModel === 'gpt-5' || actualModel === 'gpt-5-thinking';
     
-    let endpoint = 'https://api.openai.com/v1/chat/completions';
-    let requestBody: any;
-
-    if (isGPT5Model) {
-      // GPT-5 models use the new /v1/responses endpoint with different format
-      endpoint = 'https://api.openai.com/v1/responses';
+    // All models use chat completions format
+    let processedMessages = messages;
+    if (isO1Model) {
+      const systemMessage = messages.find(m => m.role === 'system');
+      const userMessage = messages.find(m => m.role === 'user');
       
-      // Convert messages to input parts format
-      const input: any[] = [];
-      
-      for (const message of messages) {
-        const content = message.content;
-        if (typeof content === 'string') {
-          input.push({
-            type: 'text',
-            text: content
-          });
-        } else if (Array.isArray(content)) {
-          // Handle image content for multi-modal messages
-          for (const part of content) {
-            if (part.type === 'text') {
-              input.push({
-                type: 'text',
-                text: part.text
-              });
-            } else if (part.type === 'image_url') {
-              input.push({
-                type: 'input_image',
-                input_image: {
-                  url: part.image_url.url
-                }
-              });
-            }
-          }
-        }
-      }
-      
-      requestBody = {
-        model: actualModel,
-        input,
-        max_completion_tokens: options.max_tokens || 2000,
-        temperature: options.temperature || this.config.temperature,
-        response_format: { type: "json_object" }
-      };
-      
-      // Add reasoning_effort for gpt-5-thinking
-      if (actualModel === 'gpt-5-thinking' && options.reasoning_effort) {
-        requestBody.reasoning_effort = options.reasoning_effort;
-      }
-      
-    } else {
-      // o1 models and regular models use chat completions format
-      let processedMessages = messages;
-      if (isO1Model) {
-        const systemMessage = messages.find(m => m.role === 'system');
-        const userMessage = messages.find(m => m.role === 'user');
-        
-        if (systemMessage && userMessage) {
-          processedMessages = [{
-            role: 'user',
-            content: `${systemMessage.content}\n\n${userMessage.content}`
-          }];
-        } else {
-          processedMessages = messages.filter(m => m.role !== 'system');
-        }
-      }
-      
-      requestBody = {
-        model: actualModel,
-        messages: processedMessages,
-        temperature: isO1Model ? 1 : (options.temperature || this.config.temperature)
-      };
-      
-      // Add reasoning_effort only for o1 models
-      if (isO1Model && options.reasoning_effort) {
-        requestBody.reasoning_effort = options.reasoning_effort;
-      }
-      
-      // o1 models use max_completion_tokens instead of max_tokens
-      if (isO1Model) {
-        requestBody.max_completion_tokens = options.max_tokens || 2000;
+      if (systemMessage && userMessage) {
+        processedMessages = [{
+          role: 'user',
+          content: `${systemMessage.content}\n\n${userMessage.content}`
+        }];
       } else {
-        requestBody.max_tokens = options.max_tokens || 2000;
-      }
-      
-      // Add tools only for non-o1 models
-      if (!isO1Model && options.tools) {
-        requestBody.tools = options.tools;
+        processedMessages = messages.filter(m => m.role !== 'system');
       }
     }
     
-    const response = await fetch(endpoint, {
+    const requestBody: any = {
+      model: actualModel,
+      messages: processedMessages,
+      temperature: isO1Model ? 1 : (options.temperature || this.config.temperature)
+    };
+    
+    // Add reasoning_effort for reasoning models
+    if ((isO1Model || isGPT5Model) && options.reasoning_effort) {
+      requestBody.reasoning_effort = options.reasoning_effort;
+    }
+    
+    // GPT-5 and o1 models use max_completion_tokens instead of max_tokens
+    if (isO1Model || isGPT5Model) {
+      requestBody.max_completion_tokens = options.max_tokens || 2000;
+    } else {
+      requestBody.max_tokens = options.max_tokens || 2000;
+    }
+    
+    // Add tools only for non-o1 and non-GPT5 models
+    if (!isO1Model && !isGPT5Model && options.tools) {
+      requestBody.tools = options.tools;
+    }
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.config.openai_api_key}`,
@@ -209,17 +156,10 @@ export class LLMClient {
 
     const data = await response.json();
     
-    if (isGPT5Model) {
-      return {
-        content: data.content,
-        usage: data.usage
-      };
-    } else {
-      return {
-        content: data.choices[0].message.content,
-        usage: data.usage
-      };
-    }
+    return {
+      content: data.choices[0].message.content,
+      usage: data.usage
+    };
   }
 
   private async callAnthropic(
