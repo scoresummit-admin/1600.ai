@@ -45,6 +45,7 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem, timeoutMs = 12000): Promise<SolverResult> {
     const startTime = Date.now();
+    console.log('🔄 EBRW solver starting with timeout:', timeoutMs);
     
     try {
       // Primary solve with GPT-5 (low effort)
@@ -75,7 +76,7 @@ export class EBRWSolver {
   }
 
   private async solvePrimary(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
-    console.log('EBRW solver primary timeout:', timeoutMs); // Use the parameter
+    console.log('🔄 EBRW primary solver starting with timeout:', timeoutMs);
     
     let messages;
     
@@ -115,6 +116,8 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
         { role: 'user', content: userPrompt }
       ];
     }
+    
+    console.log('📡 Making OpenAI API call for EBRW solving...');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -131,10 +134,12 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
     });
 
     if (!response.ok) {
+      console.error('❌ OpenAI API error:', response.status, response.statusText);
       throw new Error(`OpenAI API error: ${response.statusText}`);
     }
 
     const data = await response.json();
+    console.log('✅ OpenAI API response received');
     let content = data.choices[0].message.content.trim();
     
     // Handle JSON markdown wrapper

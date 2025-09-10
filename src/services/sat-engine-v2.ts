@@ -85,24 +85,42 @@ export class SATEngine {
         // EBRW Pipeline: GPT-5 → Claude Verifier
         console.log('📚 Solving EBRW question...');
         
-        solverResult = await Promise.race([
-          this.ebrwSolver.solve(routedItem, Math.min(remainingTime * 0.6, 12000)),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('EBRW solver timeout')), 12000)
-          )
-        ]);
+        try {
+          solverResult = await Promise.race([
+            this.ebrwSolver.solve(routedItem, Math.min(remainingTime * 0.6, 12000)),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('EBRW solver timeout')), 12000)
+            )
+          ]);
+          console.log('✅ EBRW solver completed:', solverResult.final);
+        } catch (error) {
+          console.error('❌ EBRW solver failed:', error);
+          throw error;
+        }
         
         this.metrics.model_usage['gpt-5']++;
         if (solverResult.meta.escalated) {
           this.metrics.model_usage['gpt-5-thinking']++;
         }
         
-        verifierReport = await Promise.race([
-          this.ebrwVerifier.verify(routedItem, solverResult),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('EBRW verifier timeout')), 18000)
-          )
-        ]);
+        try {
+          verifierReport = await Promise.race([
+            this.ebrwVerifier.verify(routedItem, solverResult),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('EBRW verifier timeout')), 8000)
+            )
+          ]);
+          console.log('✅ EBRW verifier completed:', verifierReport.passed ? 'PASSED' : 'FAILED');
+        } catch (error) {
+          console.error('❌ EBRW verifier failed:', error);
+          // Create fallback verification
+          verifierReport = {
+            passed: false,
+            score: 0.3,
+            notes: ['Verifier failed due to error'],
+            checks: ['error']
+          };
+        }
         
         this.metrics.model_usage['claude-3.5-sonnet']++;
         
@@ -110,21 +128,39 @@ export class SATEngine {
         // Math Pipeline: o4-mini → Python → Math Verifier
         console.log('🔢 Solving Math question...');
         
-        solverResult = await Promise.race([
-          this.mathSolver.solve(routedItem, Math.min(remainingTime * 0.7, 16000)),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Math solver timeout')), 16000)
-          )
-        ]);
+        try {
+          solverResult = await Promise.race([
+            this.mathSolver.solve(routedItem, Math.min(remainingTime * 0.7, 16000)),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('Math solver timeout')), 16000)
+            )
+          ]);
+          console.log('✅ Math solver completed:', solverResult.final);
+        } catch (error) {
+          console.error('❌ Math solver failed:', error);
+          throw error;
+        }
         
         this.metrics.model_usage['o4-mini']++;
         
-        verifierReport = await Promise.race([
-          this.mathVerifier.verify(routedItem, solverResult),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Math verifier timeout')), 6000)
-          )
-        ]);
+        try {
+          verifierReport = await Promise.race([
+            this.mathVerifier.verify(routedItem, solverResult),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('Math verifier timeout')), 6000)
+            )
+          ]);
+          console.log('✅ Math verifier completed:', verifierReport.passed ? 'PASSED' : 'FAILED');
+        } catch (error) {
+          console.error('❌ Math verifier failed:', error);
+          // Create fallback verification
+          verifierReport = {
+            passed: false,
+            score: 0.3,
+            notes: ['Verifier failed due to error'],
+            checks: ['error']
+          };
+        }
       }
       
       // Step 3: Aggregate results
