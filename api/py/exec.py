@@ -1,5 +1,4 @@
 import json
-import sys
 import io
 import traceback
 import signal
@@ -11,29 +10,20 @@ from fractions import Fraction
 import math
 import itertools
 import statistics
-import json
-import os
+from flask import Flask, request, jsonify
 
-# Set resource limits
-try:
-    resource.setrlimit(resource.RLIMIT_CPU, (5, 5))  # 5 second CPU limit
-    resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))  # 256MB memory limit
-except (ImportError, OSError):
-    # Skip resource limits if not available (e.g., on Vercel)
-    pass
+# -------- limits (unchanged) --------
+resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
+resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
 
 def timeout_handler(signum, frame):
     raise TimeoutError("Execution timeout")
 
 def execute_python(code, inputs=None):
-    """Execute Python code in a restricted environment"""
-    
-    # Set up timeout
     signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(5)  # 5 second timeout
-    
+    signal.alarm(5)
+
     try:
-        # Create restricted namespace
         safe_globals = {
             '__builtins__': {
                 'abs': abs, 'all': all, 'any': any, 'bool': bool, 'dict': dict,
@@ -51,42 +41,35 @@ def execute_python(code, inputs=None):
             'itertools': itertools,
             'statistics': statistics,
         }
-        
-        # Add inputs if provided
         if inputs:
             safe_globals.update(inputs)
-        
-        # Capture stdout
+
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
-        
+
         with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-            # Execute the code
             exec_globals = safe_globals.copy()
             exec(code, exec_globals)
-            
-            # Try to get result from common variable names
             result = None
-            for var_name in ['result', 'answer', 'output', 'final']:
-                if var_name in exec_globals:
-                    result = exec_globals[var_name]
+            for name in ['result', 'answer', 'output', 'final']:
+                if name in exec_globals:
+                    result = exec_globals[name]
                     break
-            
-            # If no result variable found, try to evaluate the last expression
             if result is None:
                 lines = code.strip().split('\n')
                 if lines:
                     last_line = lines[-1].strip()
-                    if last_line and not last_line.startswith(('print', 'import', 'from', 'def', 'class', 'if', 'for', 'while', 'try', 'with')):
+                    if last_line and not last_line.startswith(
+                        ('print', 'import', 'from', 'def', 'class', 'if', 'for', 'while', 'try', 'with')
+                    ):
                         try:
                             result = eval(last_line, exec_globals)
                         except:
                             pass
-        
+
         stdout_text = stdout_capture.getvalue()
         stderr_text = stderr_capture.getvalue()
-        
-        # Convert numpy types to Python types for JSON serialization
+
         if hasattr(result, 'item'):
             result = result.item()
         elif isinstance(result, np.ndarray):
@@ -96,131 +79,24 @@ def execute_python(code, inputs=None):
                 result = float(result)
             except:
                 result = str(result)
-        
-        return {
-            'ok': True,
-            'result': result,
-            'stdout': stdout_text,
-            'stderr': stderr_text if stderr_text else None
-        }
-        
+
+        return {"ok": True, "result": result, "stdout": stdout_text, "stderr": stderr_text or None}
     except TimeoutError:
-        return {
-            'ok': False,
-            'error': 'Execution timeout (5 seconds)'
-        }
+        return {"ok": False, "error": "Execution timeout (5 seconds)"}
     except Exception as e:
-        return {
-            'ok': False,
-            'error': f"{type(e).__name__}: {str(e)}",
-            'traceback': traceback.format_exc()
-        }
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)}", "traceback": traceback.format_exc()}
     finally:
-        signal.alarm(0)  # Cancel timeout
+        signal.alarm(0)
 
-def handler(event, context):
-    """Vercel serverless function handler"""
-    try:
-        # Handle different input formats
-        if hasattr(event, 'get_json'):
-            # Flask-like request object
-            body = event.get_json()
-        elif isinstance(event, dict) and 'body' in event:
-            # Vercel event format
-            body_str = event['body']
-            if isinstance(body_str, str):
-                body = json.loads(body_str)
-            else:
-                body = body_str
-        elif hasattr(event, 'json'):
-            # Direct JSON access
-            body = event.json
-        else:
-            # Fallback - assume event is the body itself
-            body = event if isinstance(event, dict) else {}
-        
-        code = body.get('code', '')
-        inputs = body.get('inputs', {})
-        
-        if not code:
-            result = {'ok': False, 'error': 'No code provided'}
-        else:
-            result = execute_python(code, inputs)
-        
-        # Return in Vercel format
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-            },
-            'body': json.dumps(result)
-        }
-        
-    except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps({
-                'ok': False,
-                'error': f"Handler error: {str(e)}"
-            })
-        }
+# -------- Flask app for Vercel --------
+app = Flask(__name__)
 
-# Also support direct invocation for testing
-def main(request):
-    """Alternative handler for Google Cloud Functions style"""
-    if request.method == 'OPTIONS':
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        }
-        return ('', 204, headers)
-
-    try:
-        body = request.get_json()
-        code = body.get('code', '')
-        inputs = body.get('inputs', {})
-        
-        if not code:
-            result = {'ok': False, 'error': 'No code provided'}
-        else:
-            result = execute_python(code, inputs)
-            
-        headers = {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-        }
-        
-        return (json.dumps(result), 200, headers)
-        
-    except Exception as e:
-        headers = {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-        }
-        return {
-            'statusCode': 500,
-            'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps({
-                'ok': False,
-                'error': f"Handler error: {str(e)}"
-            })
-        }
-
-# For local testing
-if __name__ == '__main__':
-    test_code = """
-import sympy as sp
-x = sp.Symbol('x')
-equation = sp.Eq(2*x + 3, 7)
-solution = sp.solve(equation, x)[0]
-result = solution
-print(f"Solution: x = {solution}")
-"""
-    
-    result = execute_python(test_code)
-    print(json.dumps(result, indent=2))
+@app.post("/")
+def run():
+    body = request.get_json(silent=True) or {}
+    code = body.get("code", "")
+    inputs = body.get("inputs", {})
+    if not code:
+        return jsonify({"ok": False, "error": "No code provided"}), 400
+    result = execute_python(code, inputs)
+    return jsonify(result), 200
