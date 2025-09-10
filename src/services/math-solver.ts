@@ -11,19 +11,20 @@ Return ONLY a JSON object (no code fences, no commentary) with this exact schema
   "method": "symbolic"|"numeric"|"hybrid",
   "checks": string[],
   "short_explanation": "≤2 sentences",
-  "python": "# Python code to solve/verify the problem\n# Use available modules: sympy, numpy, math\n# Common imports already available: symbols, solve, simplify, expand, factor, Eq\n# Set 'result' variable with final answer\n\n# Example structure:\n# x = symbols('x')\n# equation = Eq(2*x + 5, 13)\n# solution = solve(equation, x)[0]\n# result = solution"
+  "python": "# Python code to solve/verify the problem\\n# Use available modules: sympy, numpy, math\\n# Available functions: symbols, solve, simplify, expand, factor, Eq, sqrt, pi, sin, cos, tan, log, exp\\n# Set 'result' variable with final answer\\n\\n# Example structure:\\n# x = symbols('x')\\n# equation = Eq(2*x + 5, 13)\\n# solution = solve(equation, x)[0]\\n# result = solution"
 }
 
+CRITICAL: You MUST provide working Python code that solves the problem step-by-step.
+
 Policy:
-- Extract variables and constraints.
-- Solve accurately; exact where feasible (fractions/simplify) or numeric if fine.
-- ALWAYS provide Python code that solves the problem step-by-step.
-- Use sympy for symbolic math, numpy for calculations.
-- Use explicit function calls like symbols(), solve(), simplify() rather than import statements.
+- Extract variables and constraints from the problem
+- Solve accurately using symbolic math where possible
+- ALWAYS provide Python code that solves/verifies the problem
+- Use explicit function calls: symbols(), solve(), simplify(), expand(), factor(), Eq()
 - Available functions: symbols, solve, simplify, expand, factor, Eq, sqrt, pi, sin, cos, tan, log, exp
-- Verify with quick checks: substitute_back | units | domain | graph_consistency.
-- For MC, return the LETTER; for grid-in, return a simplified numeric (no units).
-- Python code should set 'result' variable with the final answer.
+- For MC questions, return the LETTER; for grid-in, return simplified numeric
+- Python code should set 'result' variable with the final answer
+- Verify with checks: substitute_back | units | domain | graph_consistency`;
 
 interface ModelVote {
   model: string;
