@@ -214,8 +214,8 @@ export class SATRouter {
       }
     } catch (error) {
       clearTimeout(timeoutId);
-      console.error('❌ Gemini extraction failed:', error.message);
-      throw error;
+      console.error('❌ Gemini extraction failed:', error instanceof Error ? error.message : 'Unknown error');
+      throw error instanceof Error ? error : new Error('Unknown error occurred');
     }
   }
 
