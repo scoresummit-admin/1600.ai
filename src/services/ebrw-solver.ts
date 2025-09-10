@@ -136,7 +136,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
         model: 'gpt-5',
         messages,
         temperature: 0.1,
-        max_tokens: 2000,
+        max_completion_tokens: 2000,
       }),
     });
 
