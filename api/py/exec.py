@@ -3,6 +3,7 @@ import io
 import traceback
 import signal
 import resource
+import threading
 from contextlib import redirect_stdout, redirect_stderr
 import sympy
 import numpy as np
@@ -20,8 +21,10 @@ def timeout_handler(signum, frame):
     raise TimeoutError("Execution timeout")
 
 def execute_python(code, inputs=None):
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(5)
+    use_alarm = threading.current_thread() is threading.main_thread()
+    if use_alarm:
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(5)
 
     try:
         safe_globals = {
@@ -86,7 +89,8 @@ def execute_python(code, inputs=None):
     except Exception as e:
         return {"ok": False, "error": f"{type(e).__name__}: {str(e)}", "traceback": traceback.format_exc()}
     finally:
-        signal.alarm(0)
+        if use_alarm:
+            signal.alarm(0)
 
 # -------- Flask app for Vercel --------
 app = Flask(__name__)
