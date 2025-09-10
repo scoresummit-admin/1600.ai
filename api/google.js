@@ -173,7 +173,7 @@ Return compact JSON:
     const data = await response.json();
     console.log('Google API success, processing response...');
     
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
       console.error('Invalid Google API response structure:', JSON.stringify(data, null, 2));
       return res.status(500).json({ 
         error: 'Invalid response from Google API',
