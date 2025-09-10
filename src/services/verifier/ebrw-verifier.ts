@@ -87,22 +87,25 @@ export class EBRWVerifier {
     score: number;
     reasoning: string;
   }> {
-    const systemPrompt = `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
-
-When given an image, analyze the question directly from the image for the most accurate assessment.
-Return JSON:
-{
-  "scores": {"A": 0.0-1.0, "B": 0.0-1.0, "C": 0.0-1.0, "D": 0.0-1.0},
-  "best_choice": "A|B|C|D",
-  "reasoning": "Brief explanation for your choice"
-}`;
+    // Detect MIME type from base64 data
+    const detectMimeType = (base64Data: string): string => {
+      if (base64Data.startsWith('iVBORw0KGgo')) {
+        return 'image/png';
+      } else if (base64Data.startsWith('/9j/')) {
+        return 'image/jpeg';
+      }
+      // Default to PNG if uncertain (most screenshots are PNG)
+      return 'image/png';
+    };
 
     let messages;
     
     if (item.imageBase64) {
+      const mimeType = detectMimeType(item.imageBase64);
+      console.log(`🔍 Detected image type: ${mimeType} for base64 starting with: ${item.imageBase64.substring(0, 20)}...`);
+      
       // Image-first approach for verification
       messages = [
-        { role: 'system', content: systemPrompt },
         {
           role: 'user',
           content: [
@@ -112,13 +115,20 @@ Return JSON:
 
 ${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}
 
-Proposed answer: ${solverResult.final}`
+Proposed answer: ${solverResult.final}
+
+Return JSON:
+{
+  "scores": {"A": 0.0-1.0, "B": 0.0-1.0, "C": 0.0-1.0, "D": 0.0-1.0},
+  "best_choice": "A|B|C|D", 
+  "reasoning": "Brief explanation for your choice"
+}`
             },
             {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: 'image/jpeg',
+                media_type: mimeType,
                 data: item.imageBase64
               }
             }
@@ -132,8 +142,19 @@ Proposed answer: ${solverResult.final}`
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
       
       messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
+        { 
+          role: 'user', 
+          content: `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
+
+${userPrompt}
+
+Return JSON:
+{
+  "scores": {"A": 0.0-1.0, "B": 0.0-1.0, "C": 0.0-1.0, "D": 0.0-1.0},
+  "best_choice": "A|B|C|D",
+  "reasoning": "Brief explanation for your choice"
+}` 
+        }
       ];
     }
 
@@ -146,6 +167,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          system: "You are an independent SAT EBRW judge. Analyze questions accurately and provide scoring.",
           messages,
           max_tokens: 500,
           temperature: 0.1,
