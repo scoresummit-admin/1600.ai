@@ -5,6 +5,7 @@ export class EBRWVerifier {
 
   async verify(item: RoutedItem, solverResult: SolverResult): Promise<VerifierReport> {
     const startTime = Date.now();
+    console.log('🔄 EBRW verifier starting...');
     
     try {
       // Verify evidence exists in the passage (use ocrText for quote matching)
@@ -137,6 +138,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
     }
 
     try {
+      console.log('📡 Making Anthropic API call for EBRW verification...');
       // Call our serverless function instead of Anthropic directly
       const response = await fetch('/api/anthropic', {
         method: 'POST',
@@ -153,11 +155,13 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Anthropic API error:', response.status, response.statusText, errorData);
         console.warn(`Anthropic API error (${response.status}): ${response.statusText} - ${errorData.error}`);
         return this.fallbackVerification(solverResult);
       }
 
       const data = await response.json();
+      console.log('✅ Anthropic API response received');
       let content = data.content.trim();
       
       // Handle JSON markdown wrapper
