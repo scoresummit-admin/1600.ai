@@ -270,4 +270,3 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
     };
   }
 }
-        fullText: item.promptText || '',
