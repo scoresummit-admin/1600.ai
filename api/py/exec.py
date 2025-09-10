@@ -36,16 +36,32 @@ def execute_python(code, inputs=None):
                 'min': min, 'pow': pow, 'range': range, 'round': round,
                 'set': set, 'sorted': sorted, 'str': str, 'sum': sum,
                 'tuple': tuple, 'type': type, 'zip': zip, 'print': print,
-                're': re
+                're': re, '__import__': __import__
             },
             'sympy': sympy,
+            'sp': sympy,
             'np': np,
             'numpy': np,
             'Fraction': Fraction,
             'math': math,
             'itertools': itertools,
             'statistics': statistics,
-            're': re
+            're': re,
+            # Add commonly used sympy functions directly
+            'symbols': sympy.symbols,
+            'Symbol': sympy.Symbol,
+            'solve': sympy.solve,
+            'simplify': sympy.simplify,
+            'expand': sympy.expand,
+            'factor': sympy.factor,
+            'Eq': sympy.Eq,
+            'sqrt': sympy.sqrt,
+            'pi': sympy.pi,
+            'sin': sympy.sin,
+            'cos': sympy.cos,
+            'tan': sympy.tan,
+            'log': sympy.log,
+            'exp': sympy.exp
         }
         if inputs:
             safe_globals.update(inputs)
@@ -59,7 +75,7 @@ def execute_python(code, inputs=None):
             
             # Look for result in multiple possible variable names
             result = None
-            for name in ['result', 'answer', 'output', 'final', 'ans', 'solution']:
+            for name in ['result', 'answer', 'output', 'final', 'ans', 'solution', 'simplified_expr', 'final_answer']:
                 if name in exec_globals:
                     result = exec_globals[name]
                     break
