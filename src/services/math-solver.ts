@@ -204,7 +204,9 @@ export class MathSolver {
           }
         } else {
           // No majority - use domain preference
-          finalResult = this.selectByDomainPreference(item, votes, qwenResult, deepseekResult, mistralResult);
+          const qwenValue = qwenResult.status === 'fulfilled' ? qwenResult.value : null;
+          const deepseekValue = deepseekResult.status === 'fulfilled' ? deepseekResult.value : null;
+          finalResult = this.selectByDomainPreference(item, votes, qwenValue, deepseekValue, mistralResult);
           finalModel = finalResult.model;
         }
       } catch (error) {
@@ -235,27 +237,27 @@ export class MathSolver {
   private selectByDomainPreference(
     item: RoutedItem, 
     votes: ModelVote[], 
-    qwenResult: PromiseSettledResult<SolverResult>, 
-    deepseekResult: PromiseSettledResult<SolverResult>,
+    qwenResult: SolverResult | null, 
+    deepseekResult: SolverResult | null,
     mistralResult?: SolverResult
   ): SolverResult {
     // Prefer Qwen for algebra/advanced_math, DeepSeek for PSDA/geometry_trig
     const preferQwen = item.subdomain === 'algebra' || item.subdomain === 'advanced_math';
     
-    if (preferQwen && qwenResult.status === 'fulfilled') {
-      return qwenResult.value;
-    } else if (!preferQwen && deepseekResult.status === 'fulfilled') {
-      return deepseekResult.value;
+    if (preferQwen && qwenResult) {
+      return qwenResult;
+    } else if (!preferQwen && deepseekResult) {
+      return deepseekResult;
     } else if (mistralResult) {
       return mistralResult;
     }
     
     // Fallback to highest confidence
     const bestVote = votes.sort((a, b) => b.confidence - a.confidence)[0];
-    if (bestVote.model === this.qwenTextModel && qwenResult.status === 'fulfilled') {
-      return qwenResult.value;
-    } else if (deepseekResult.status === 'fulfilled') {
-      return deepseekResult.value;
+    if (bestVote.model === this.qwenTextModel && qwenResult) {
+      return qwenResult;
+    } else if (deepseekResult) {
+      return deepseekResult;
     } else {
       return mistralResult || (() => { throw new Error('No valid results available'); })();
     }
