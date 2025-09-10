@@ -203,17 +203,23 @@ export class MathSolver {
             finalResult = mistralResult;
           } else {
             // Fallback to any available result
-            finalResult = qwenResult.status === 'fulfilled' ? qwenResult.value : 
-                         deepseekResult.status === 'fulfilled' ? deepseekResult.value :
-                         (() => { throw new Error('No valid results available'); })();
+            if (qwenResult.status === 'fulfilled') {
+              finalResult = qwenResult.value;
+            } else if (deepseekResult.status === 'fulfilled') {
+              finalResult = deepseekResult.value;
+            } else {
+              throw new Error('No valid results available');
+            }
           }
         } else {
           // No majority - use domain preference
-          const qwenValue = qwenResult.status === 'fulfilled' ? qwenResult.value : null;
-          const deepseekValue = deepseekResult.status === 'fulfilled' ? deepseekResult.value : null;
-          const qwenValue = qwenResult.status === 'fulfilled' ? qwenResult.value : null;
-          const deepseekValue = deepseekResult.status === 'fulfilled' ? deepseekResult.value : null;
-          finalResult = this.selectByDomainPreference(item, votes, qwenValue, deepseekValue, mistralResult);
+          if (qwenResult.status === 'fulfilled') {
+            finalResult = qwenResult.value;
+          } else if (deepseekResult.status === 'fulfilled') {
+            finalResult = deepseekResult.value;
+          } else {
+            throw new Error('No valid results from any model');
+          }
           finalModel = finalResult.model;
         }
       } catch (error) {
@@ -241,9 +247,13 @@ export class MathSolver {
     const latencyMs = Date.now() - startTime;
     console.log(`{router: 'text', modelsTried: [${modelsTried.join(', ')}], finalModel: '${finalModel}', is_gridin: ${item.isGridIn}, latencyMs: ${latencyMs}}`);
 
-    return finalResult;
-  }
-
+        if (qwenResult.status === 'fulfilled') {
+          finalResult = qwenResult.value;
+        } else if (deepseekResult.status === 'fulfilled') {
+          finalResult = deepseekResult.value;
+        } else {
+          throw new Error('No valid results from any model');
+        }
   private selectByDomainPreference(
     item: RoutedItem, 
     votes: ModelVote[], 
