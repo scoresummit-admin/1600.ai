@@ -3,10 +3,11 @@ import { Upload, Camera, FileImage, Loader2, X } from 'lucide-react';
 
 interface ImageUploadProps {
   onImageProcessed: (questionText: string, choices: string[]) => void;
+  onStartProcessing: () => void;
   isProcessing: boolean;
 }
 
-export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, isProcessing }) => {
+export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, onStartProcessing, isProcessing }) => {
   const [dragActive, setDragActive] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +47,9 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, isPr
     // Create preview
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+
+    // Notify parent that processing is starting
+    onStartProcessing();
 
     // Process with OCR
     try {
