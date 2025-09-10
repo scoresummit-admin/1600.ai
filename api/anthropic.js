@@ -123,29 +123,28 @@ export default async function handler(req, res) {
       console.log('Opus unavailable (4xx), falling back to Sonnet 4...');
       modelToUse = 'claude-3-5-sonnet-20241022';
       response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': anthropicApiKey,
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: modelToUse,
-        messages: messages.filter(m => m.role !== 'system'),
-        system: messages.find(m => m.role === 'system')?.content,
-        max_tokens,
-        temperature,
-      }),
-    });
-
+        method: 'POST',
+        headers: {
+          'x-api-key': anthropicApiKey,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
           model: modelToUse,
           messages: cleanedMessages.filter(m => m.role !== 'system'),
           system: system || cleanedMessages.find(m => m.role === 'system')?.content,
+          max_tokens,
+          temperature,
+        }),
+      });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
       return res.status(response.status).json({ 
         error: `Anthropic API error: ${response.statusText}`,
         details: errorText
       });
-    }
     }
 
     const data = await response.json();
