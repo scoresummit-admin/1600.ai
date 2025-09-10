@@ -20,6 +20,8 @@ export interface SatItem {
 export interface RoutedItem {
   section: Section;
   subdomain: EbrwDomain | MathDomain;
+  imageBase64?: string;         // Primary source of truth
+  ocrText?: string;            // Supplementary text from OCR
   fullText: string;           // verbatim passage + question from UI/OCR
   passageText?: string;       // just the passage part (if separable)
   questionText?: string;      // just the question stem (if separable)

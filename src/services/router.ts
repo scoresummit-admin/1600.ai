@@ -2,6 +2,7 @@ import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../../type
 
 const SYSTEM_ROUTER = `You are an expert SAT question classifier. Analyze the question and return ONLY classification labels.
 
+When given an image, examine it carefully to determine the question type and domain.
 EBRW Domains:
 - craft_structure: Author's purpose, point of view, rhetorical devices, text structure, meaning in context
 - information_ideas: Main ideas, supporting details, inferences, data interpretation, quantitative info
@@ -34,17 +35,23 @@ export class SATRouter {
     try {
       let promptText = item.promptText || '';
       let choices = item.choices || [];
+      let ocrText = '';
+      let imageBase64 = '';
       let hasFigure = false;
 
       // Handle screenshot input with dual OCR
       if (item.source === 'screenshot' && item.imageBase64) {
+        imageBase64 = item.imageBase64;
         console.log('🖼️ Processing screenshot with dual OCR...');
         const ocrResults = await this.dualOCR(item.imageBase64);
         
         // Reconcile OCR results
-        promptText = ocrResults.openai.text.length > ocrResults.gemini.text.length 
+        ocrText = ocrResults.openai.text.length > ocrResults.gemini.text.length 
           ? ocrResults.openai.text 
           : ocrResults.gemini.text;
+        
+        // Set fullText from OCR for backward compatibility
+        promptText = ocrText;
         
         // Use choices from the result with more choices, or combine if different
         if (ocrResults.openai.choices.length >= ocrResults.gemini.choices.length) {
@@ -58,12 +65,16 @@ export class SATRouter {
                    ocrResults.openai.choices.length !== ocrResults.gemini.choices.length;
       }
 
-      // Classify with GPT-5
-      const classification = await this.classifyQuestion(promptText, choices);
+      // Classify with GPT-5 (prefer image if available)
+      const classification = await this.classifyQuestion(promptText, choices, imageBase64);
       
       const routedItem: RoutedItem = {
         section: classification.section,
         subdomain: classification.subdomain,
+        imageBase64: undefined,
+        ocrText: undefined,
+        imageBase64: imageBase64 || undefined,
+        ocrText: ocrText || undefined,
         fullText: promptText, // verbatim from UI/OCR
         choices: choices,     // verbatim from UI/OCR
         isGridIn: item.isGridIn || choices.length === 0,
@@ -185,10 +196,50 @@ Image data: data:image/jpeg;base64,${imageBase64}`,
     subdomain: EbrwDomain | MathDomain;
     hasFigure: boolean;
   }> {
-    const userPrompt = `Question: ${promptText}
+  private async classifyQuestion(
+    promptText: string, 
+    choices: string[], 
+    imageBase64?: string
+  ): Promise<{
+    section: Section;
+    subdomain: EbrwDomain | MathDomain;
+    hasFigure: boolean;
+  }> {
+
+    let messages;
+    
+    if (imageBase64) {
+      // Image-first approach: send image with brief instruction
+      messages = [
+        { role: 'system', content: SYSTEM_ROUTER },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Classify this SAT question from the image. Analyze the question type and domain.'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`
+              }
+            }
+          ]
+        }
+      ];
+    } else {
+      // Fallback to text-based classification
+      const userPrompt = `Question: ${promptText}
 
 Choices:
 ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+      
+      messages = [
+        { role: 'system', content: SYSTEM_ROUTER },
+        { role: 'user', content: userPrompt }
+      ];
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -198,10 +249,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: SYSTEM_ROUTER },
-          { role: 'user', content: userPrompt }
-        ],
+        messages,
         temperature: 0.1,
         max_tokens: 800,
       }),
@@ -253,6 +301,8 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       return {
         section: 'MATH',
         subdomain: 'algebra' as MathDomain,
+        imageBase64: undefined,
+        ocrText: undefined,
         fullText: this.cleanText(item.promptText || ''),
         choices,
         isGridIn: choices.length === 0,

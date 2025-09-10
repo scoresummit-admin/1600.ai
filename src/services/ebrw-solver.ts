@@ -1,8 +1,10 @@
 import { RoutedItem, SolverResult } from '../../types/sat';
 
-const SYSTEM_EBRW = `You are an expert SAT EBRW solver.
+const SYSTEM_EBRW = `You are an expert SAT EBRW solver with image analysis capabilities.
 
-Return ONLY the JSON schema provided; do not reveal chain-of-thought. Provide a brief explanation and 1–2 evidence items (short direct quotes or a named grammar rule).
+When given an image, analyze the SAT question directly from the image. Extract the passage, question, and answer choices, then solve.
+
+Return ONLY the JSON schema provided; do not reveal chain-of-thought. Provide a brief explanation and 1–2 evidence items (short direct quotes from the passage or a named grammar rule).
 
 Cheat-sheet (for reference; use minimally):
 - Craft & Structure: central idea, author's purpose, tone, meaning-in-context, function of a sentence, text structure, logical transitions.
@@ -74,12 +76,45 @@ export class EBRWSolver {
 
   private async solvePrimary(item: RoutedItem, timeoutMs: number): Promise<SolverResult> {
     console.log('EBRW solver primary timeout:', timeoutMs); // Use the parameter
-    const userPrompt = `Domain: ${item.subdomain}
+    
+    let messages;
+    
+    if (item.imageBase64) {
+      // Image-first approach
+      messages = [
+        { role: 'system', content: SYSTEM_EBRW },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Domain: ${item.subdomain}
+
+Extract the passage, question, and choices from this SAT image, then solve it. Focus on providing 1-2 short, direct quotes as evidence.`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${item.imageBase64}`
+              }
+            }
+          ]
+        }
+      ];
+    } else {
+      // Fallback to text-based approach
+      const userPrompt = `Domain: ${item.subdomain}
 
 ${item.fullText}
 
 Choices:
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+      
+      messages = [
+        { role: 'system', content: SYSTEM_EBRW },
+        { role: 'user', content: userPrompt }
+      ];
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -89,10 +124,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: SYSTEM_EBRW },
-          { role: 'user', content: userPrompt }
-        ],
+        messages,
         temperature: 0.1,
         max_tokens: 1000,
       }),
@@ -129,7 +161,37 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
 
   private async solveEscalated(item: RoutedItem, timeoutMs = 10000): Promise<SolverResult> {
     console.log('EBRW solver escalated timeout:', timeoutMs); // Use the parameter
-    const userPrompt = `Domain: ${item.subdomain}
+    
+    let messages;
+    
+    if (item.imageBase64) {
+      // Image-first approach for escalation
+      messages = [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `${SYSTEM_EBRW}
+
+Domain: ${item.subdomain}
+
+This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
+
+Extract the passage, question, and choices from this SAT image, then provide a thorough analysis. Focus on providing precise, short quotes as evidence.`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${item.imageBase64}`
+              }
+            }
+          ]
+        }
+      ];
+    } else {
+      // Fallback to text-based escalation
+      const userPrompt = `Domain: ${item.subdomain}
 
 This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
 
@@ -137,6 +199,11 @@ ${item.fullText}
 
 Choices:
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+      
+      messages = [
+        { role: 'user', content: `${SYSTEM_EBRW}\n\n${userPrompt}` }
+      ];
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -146,9 +213,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
       },
       body: JSON.stringify({
         model: 'o1-preview',
-        messages: [
-          { role: 'user', content: `${SYSTEM_EBRW}\n\n${userPrompt}` }
-        ],
+        messages,
         max_completion_tokens: 1000,
         reasoning_effort: 'medium'
       }),

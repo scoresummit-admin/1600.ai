@@ -56,8 +56,8 @@ export class SATEngine {
       // Create SatItem
       const item: SatItem = {
         id: `q_${Date.now()}`,
-        source: 'text',
-        promptText: questionText,
+        source: 'screenshot',  // We're now primarily screenshot-based
+        imageBase64: questionText, // questionText is actually imageBase64 in this context
         choices: choices.length > 0 ? choices : undefined,
         isGridIn: choices.length === 0
       };

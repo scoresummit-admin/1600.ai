@@ -1,7 +1,10 @@
 import { RoutedItem, SolverResult } from '../../types/sat';
 import { runPython } from '../lib/pythonSandbox';
 
-const SYSTEM_MATH = `You are an expert SAT Math solver with access to a Python sandbox (SymPy, fractions, math). 
+const SYSTEM_MATH = `You are an expert SAT Math solver with access to a Python sandbox (SymPy, fractions, math) and image analysis capabilities.
+
+When given an image, analyze the SAT math question directly from the image, including any graphs, diagrams, or figures.
+
 Return ONLY the JSON schema; do not reveal chain-of-thought.
 
 Cheat-sheet:
@@ -74,12 +77,48 @@ export class MathSolver {
 
   private async solvePrimary(item: RoutedItem, timeoutMs = 14000): Promise<SolverResult> {
     console.log('Math solver primary timeout:', timeoutMs); // Use the parameter
-    const userPrompt = `Domain: ${item.subdomain}
+    
+    let messages;
+    
+    if (item.imageBase64) {
+      // Image-first approach
+      messages = [
+        { role: 'system', content: SYSTEM_MATH },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Domain: ${item.subdomain}
+${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
+
+Extract and solve this SAT math question from the image. Pay attention to any graphs, diagrams, or figures. Generate Python code to compute the exact answer.
+
+${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${item.imageBase64}`
+              }
+            }
+          ]
+        }
+      ];
+    } else {
+      // Fallback to text-based approach
+      const userPrompt = `Domain: ${item.subdomain}
 ${item.isGridIn ? 'Grid-in question (numeric answer)' : 'Multiple choice'}
 
 ${item.fullText}
 
 ${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` : ''}`;
+      
+      messages = [
+        { role: 'system', content: SYSTEM_MATH },
+        { role: 'user', content: userPrompt }
+      ];
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -89,9 +128,7 @@ ${!item.isGridIn ? `Choices:\n${item.choices.map((choice: string, i: number) => 
       },
       body: JSON.stringify({
         model: 'o1-mini',
-        messages: [
-          { role: 'user', content: `${SYSTEM_MATH}\n\n${userPrompt}` }
-        ],
+        messages,
         max_completion_tokens: 1000,
       }),
     });

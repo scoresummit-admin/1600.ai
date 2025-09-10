@@ -7,8 +7,11 @@ export class EBRWVerifier {
     const startTime = Date.now();
     
     try {
-      // Verify evidence exists in the passage
-      const evidenceCheck = this.verifyEvidence(solverResult.meta.evidence || [], item.fullText);
+      // Verify evidence exists in the passage (use ocrText for quote matching)
+      const evidenceCheck = this.verifyEvidence(
+        solverResult.meta.evidence || [], 
+        item.ocrText || item.fullText
+      );
       
       // Independent verification with Claude
       const independentResult = await this.independentVerification(item, solverResult);
@@ -85,6 +88,7 @@ export class EBRWVerifier {
   }> {
     const systemPrompt = `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
 
+When given an image, analyze the question directly from the image for the most accurate assessment.
 Return JSON:
 {
   "scores": {"A": 0.0-1.0, "B": 0.0-1.0, "C": 0.0-1.0, "D": 0.0-1.0},
@@ -92,9 +96,43 @@ Return JSON:
   "reasoning": "Brief explanation for your choice"
 }`;
 
-    const userPrompt = `${item.fullText}
+    let messages;
+    
+    if (item.imageBase64) {
+      // Image-first approach for verification
+      messages = [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this SAT EBRW question from the image and score each answer choice.
+
+${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}
+
+Proposed answer: ${solverResult.final}`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${item.imageBase64}`
+              }
+            }
+          ]
+        }
+      ];
+    } else {
+      // Fallback to text-based verification
+      const userPrompt = `${item.fullText}
 
 ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
+      
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ];
+    }
 
     try {
       // Call our serverless function instead of Anthropic directly
@@ -104,7 +142,7 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }],
+          messages,
           max_tokens: 500,
           temperature: 0.1,
         }),
