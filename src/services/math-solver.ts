@@ -93,13 +93,14 @@ export class MathSolver {
     if (item.imageBase64) {
       // Image-first approach
       messages = [
-        { role: 'system', content: SYSTEM_MATH },
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: `Domain: ${item.subdomain}
+              text: `${SYSTEM_MATH}
+
+Domain: ${item.subdomain}
 
 Solve this SAT math question from the image. MUST include working Python code that sets 'result' variable.`
             },
@@ -126,8 +127,10 @@ ${item.choices.length > 0 ?
 MUST include working Python code that sets 'result' variable.`;
       
       messages = [
-        { role: 'system', content: SYSTEM_MATH },
-        { role: 'user', content: userPrompt }
+        { 
+          role: 'user', 
+          content: `${SYSTEM_MATH}\n\n${userPrompt}` 
+        }
       ];
     }
     
