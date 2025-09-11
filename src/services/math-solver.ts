@@ -101,28 +101,12 @@ def execute_python(code, inputs=None):
             if hasattr(result, 'evalf'):
                 # SymPy expression - try to evaluate numerically
                 try:
-                    # For polynomial expressions, try to keep symbolic if simple
-                    if hasattr(result, 'is_polynomial') and result.is_polynomial():
-        // Extract mathematical expression from choice
-        const mathExpression = this.extractMathFromChoice(choiceContent);
-        if (mathExpression) {
-          return this.compareMathExpressions(a1, mathExpression);
-        }
-      }
-    }
-    
-    // Handle reverse case: answer1 is A/B/C/D, answer2 is expression
-    if (item && /^[abcd]$/i.test(a1) && !item.isGridIn) {
-      const choiceIndex = a1.toUpperCase().charCodeAt(0) - 65;
-      if (choiceIndex >= 0 && choiceIndex < item.choices.length) {
-        const choiceContent = item.choices[choiceIndex];
-        const mathExpression = this.extractMathFromChoice(choiceContent);
-        if (mathExpression) {
-          return this.compareMathExpressions(a2, mathExpression);
-        }
-      }
-    }
-    
+                    numeric_result = float(result.evalf())
+                    # If it's a whole number, return as int
+                    if abs(numeric_result - round(numeric_result)) < 1e-10:
+                        result = int(round(numeric_result))
+                    else:
+                        result = numeric_result
                 except:
                     result = str(result)
             elif hasattr(result, '__len__') and not isinstance(result, str):
