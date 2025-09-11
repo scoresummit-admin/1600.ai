@@ -21,6 +21,9 @@ export async function openrouterClient(
   }
 
   try {
+    const requestBody: any = {
+      model,
+      messages,
       temperature: options.temperature || 0.1,
       max_tokens: options.max_tokens || 3000,
     };
