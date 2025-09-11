@@ -101,12 +101,11 @@ def execute_python(code, inputs=None):
             if hasattr(result, 'evalf'):
                 # SymPy expression - try to evaluate numerically
                 try:
-                    numeric_result = float(result.evalf())
-                    # If it's a whole number, return as int
-                    if abs(numeric_result - round(numeric_result)) < 1e-10:
-                        result = int(round(numeric_result))
+                    # For polynomial expressions, try to keep symbolic if simple
+                    if hasattr(result, 'is_polynomial') and result.is_polynomial():
+                        result = str(result)
                     else:
-                        result = numeric_result
+                        result = float(result.evalf())
                 except:
                     result = str(result)
             elif hasattr(result, '__len__') and not isinstance(result, str):
