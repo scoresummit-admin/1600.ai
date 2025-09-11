@@ -136,7 +136,7 @@ def execute_python(code, inputs=None):
 app = Flask(__name__)
 
 # Support both root and full path when deployed so that requests to
-# `/api/py/exec` on Vercel reach this handler without returning 404.
+# `/api/py/exec\` on Vercel reach this handler without returning 404.
 @app.post("/")
 @app.post("/api/py/exec")
 def run():
