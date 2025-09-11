@@ -15,15 +15,14 @@ function App() {
 
   const handleQuestionSubmit = async (imageBase64: string, ocrText: string, choices: string[], correctAnswer?: string) => {
     // Check for required API keys
-    const hasOpenAI = !!(import.meta.env.VITE_OPENAI_API_KEY);
+    const hasOpenRouter = !!(import.meta.env.VITE_OPENROUTER_API_KEY);
     
-    if (!hasOpenAI) {
-      alert('Missing required API key. Please set OPENAI_API_KEY in your environment.');
+    if (!hasOpenRouter) {
+      alert('Missing required API key. Please set VITE_OPENROUTER_API_KEY in your environment.');
       return;
     }
     
-    // Note: Anthropic and Google API keys are now handled server-side
-    console.log('Starting SAT question solving with server-side API integration...');
+    console.log('Starting SAT question solving with OpenRouter integration...');
 
     setIsLoading(true);
     setSolution(null);

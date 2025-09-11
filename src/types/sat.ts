@@ -14,12 +14,11 @@ export type MathDomain =
   | 'geometry_trigonometry';
 
 export type ModelName = 
-  | 'gpt-5' 
-  | 'gpt-5-thinking' 
-  | 'o4-mini' 
-  | 'claude-3.5-sonnet' 
-  | 'gemini-2.5-pro'
-  | 'qwen2.5-math-72b';
+  | 'openai/gpt-5'
+  | 'openai/o3'
+  | 'x-ai/grok-4'
+  | 'deepseek/deepseek-r1'
+  | 'anthropic/claude-sonnet-4';
 
 export interface SATQuestion {
   id: string;
@@ -90,11 +89,7 @@ export interface SATSolution {
 }
 
 export interface ModelConfig {
-  openai_api_key?: string;
-  anthropic_api_key?: string;
-  google_api_key?: string;
-  azure_endpoint?: string;
-  azure_api_key?: string;
+  openrouter_api_key?: string;
   enabled_models: ModelName[];
   reasoning_effort: 'minimal' | 'low' | 'medium' | 'high';
   max_tokens: number;

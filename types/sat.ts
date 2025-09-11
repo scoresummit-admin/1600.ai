@@ -34,7 +34,7 @@ export interface SolverResult {
   final: string;                  // "A"|"B"|"C"|"D" or numeric string
   confidence: number;             // 0..1
   meta: Record<string, any>;
-  model: string;                  // "gpt-5" | "o4-mini" | "claude-3.5-sonnet" | "gemini-2.5-pro"
+  model: string;                  // OpenRouter model slug
 }
 
 export interface VerifierReport {
@@ -56,11 +56,18 @@ export interface AggregatedAnswer {
   evidenceOrChecks: string[];     // up to 2 items
 }
 
+// Model definitions - OpenRouter slugs only
+export type ModelName = 
+  | 'openai/gpt-5'
+  | 'openai/o3'
+  | 'x-ai/grok-4'
+  | 'deepseek/deepseek-r1'
+  | 'anthropic/claude-sonnet-4';
+
 // Legacy compatibility types (will be phased out)
 export type SATSection = Section;
 export type EBRWDomain = EbrwDomain;
 export type MathDomainLegacy = MathDomain;
-export type ModelName = 'gpt-5' | 'gpt-5-thinking' | 'o4-mini' | 'claude-opus-4-1-20250805' | 'claude-sonnet-4-20250514' | 'gemini-2.5-pro' | 'qwen2.5-math-72b' | 'deepseek-r1' | 'mistral-large' | 'qwen2.5-vl' | 'gpt-4o';
 
 export interface SATQuestionLegacy {
   id: string;
@@ -131,11 +138,7 @@ export interface SATSolutionLegacy {
 }
 
 export interface ModelConfig {
-  openai_api_key?: string;
-  anthropic_api_key?: string;
-  google_api_key?: string;
-  azure_endpoint?: string;
-  azure_api_key?: string;
+  openrouter_api_key?: string;
   enabled_models: ModelName[];
   reasoning_effort: 'minimal' | 'low' | 'medium' | 'high';
   max_tokens: number;

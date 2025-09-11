@@ -41,8 +41,8 @@ We’re testing the limits of LLMs by combining:
    - Detects section + subdomain, normalizes input, sets time budget.
 
 2. **Solver**  
-   - **Math**: o4-mini (Python tool) → verify → escalate to GPT-5 Thinking if uncertain.  
-   - **EBRW**: GPT-5 (low effort) → evidence span + grammar rule extraction → verified by Claude 3.5 Sonnet.  
+   - **Math**: Concurrent trio (GPT-5, Grok-4, DeepSeek-R1) with Python verification → aggregate best result.  
+   - **EBRW**: Concurrent quartet (O3, GPT-5, Grok-4, Claude Sonnet 4) → evidence extraction → verified by Claude/Grok.  
 
 3. **Verifier**  
    - Math: substitution, domain/unit checks, symbolic verification.  
@@ -50,7 +50,7 @@ We’re testing the limits of LLMs by combining:
 
 4. **Aggregator**  
    - Weighted blend of solver + verifier outputs.  
-   - Escalate only on low confidence or model disagreement.
+   - Select best result from concurrent model outputs.
 
 ---
 
@@ -78,8 +78,8 @@ It is **not intended for use on live, official SAT administrations.**
 
 - [x] Research best-performing models & strategies  
 - [x] Draft solver/verifier prompts  
-- [ ] Build prototype pipeline (router → solver → verifier → aggregator)  
-- [ ] Integrate into unified platform (LiteLLM / OpenRouter)  
+- [x] Build prototype pipeline (router → solver → verifier → aggregator)  
+- [x] Integrate into unified platform (OpenRouter)  
 - [ ] Run evaluation on official College Board practice tests  
 - [ ] Optimize for latency + cost  
 
@@ -88,10 +88,10 @@ It is **not intended for use on live, official SAT administrations.**
 ## 📚 References
 
 - College Board Digital SAT structure & scoring  
-- OpenAI o-series (o3, o4-mini) reasoning models  
-- Anthropic Claude 3.5 Sonnet  
-- Google Gemini 2.5 (Pro/Thinking)  
-- Qwen2.5-Math-72B  
+- OpenAI models (O3, GPT-5) via OpenRouter
+- Anthropic Claude Sonnet 4 via OpenRouter
+- X.AI Grok-4 via OpenRouter
+- DeepSeek R1 via OpenRouter
 - Research on self-consistency, program-aided math solving, and MCQ verification  
 
 ---

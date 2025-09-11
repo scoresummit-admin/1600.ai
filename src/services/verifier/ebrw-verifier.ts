@@ -1,7 +1,8 @@
 import { RoutedItem, SolverResult, VerifierReport } from '../../../types/sat';
+import { openrouterClient } from '../model-clients';
 
 interface VerifierResult {
-  source: 'anthropic' | 'gemini';
+  source: 'claude-sonnet-4' | 'grok-4';
   topChoice: string;
   score: number;
   reasoning: string;
@@ -21,17 +22,17 @@ export class EBRWVerifier {
         item.ocrText || item.fullText
       );
       
-      // Parallel verification with both Anthropic Opus and Gemini
-      const [anthropicResult, geminiResult] = await Promise.allSettled([
-        this.anthropicVerification(item, solverResult),
-        this.geminiVerification(item, solverResult)
+      // Parallel verification with Claude Sonnet 4 and Grok 4
+      const [claudeResult, grokResult] = await Promise.allSettled([
+        this.claudeVerification(item, solverResult),
+        this.grokVerification(item, solverResult)
       ]);
       
-      const anthropic = anthropicResult.status === 'fulfilled' ? anthropicResult.value : null;
-      const gemini = geminiResult.status === 'fulfilled' ? geminiResult.value : null;
+      const claude = claudeResult.status === 'fulfilled' ? claudeResult.value : null;
+      const grok = grokResult.status === 'fulfilled' ? grokResult.value : null;
       
       // Combine verifier results
-      const verifiers = [anthropic, gemini].filter(Boolean);
+      const verifiers = [claude, grok].filter(Boolean);
       const agreementCount = verifiers.filter(v => v!.topChoice === solverResult.final).length;
       const avgScore = verifiers.length > 0 ? verifiers.reduce((sum, v) => sum + v!.score, 0) / verifiers.length : 0;
       
@@ -39,16 +40,16 @@ export class EBRWVerifier {
       const passed = evidenceCheck.valid && 
                     (agreementCount >= 1) &&  // At least one verifier agrees
                     avgScore >= 0.7 &&
-                    !(anthropic && gemini && anthropic.topChoice !== gemini.topChoice && Math.abs(anthropic.score - gemini.score) > 0.3); // No strong disagreement
+                    !(claude && grok && claude.topChoice !== grok.topChoice && Math.abs(claude.score - grok.score) > 0.3); // No strong disagreement
       
       const score = passed ? Math.min(0.95, avgScore + 0.1) : Math.max(0.3, avgScore * 0.7);
       
       const notes = [
         ...evidenceCheck.notes,
-        anthropic ? `Anthropic Opus chose: ${anthropic.topChoice} (${anthropic.score.toFixed(2)})` : 'Anthropic verification failed',
-        gemini ? `Gemini chose: ${gemini.topChoice} (${gemini.score.toFixed(2)})` : 'Gemini verification failed',
+        claude ? `Claude Sonnet 4 chose: ${claude.topChoice} (${claude.score.toFixed(2)})` : 'Claude verification failed',
+        grok ? `Grok 4 chose: ${grok.topChoice} (${grok.score.toFixed(2)})` : 'Grok verification failed',
         `Agreement: ${agreementCount}/${verifiers.length} verifiers`,
-        anthropic?.reasoning || gemini?.reasoning || 'No reasoning available'
+        claude?.reasoning || grok?.reasoning || 'No reasoning available'
       ];
       
       console.log(`🔍 EBRW verification completed in ${Date.now() - startTime}ms: ${passed ? 'PASSED' : 'FAILED'}`);
@@ -57,7 +58,7 @@ export class EBRWVerifier {
         passed,
         score,
         notes,
-        checks: ['evidence_verification', 'anthropic_opus', 'gemini_2.5_pro']
+        checks: ['evidence_verification', 'claude_sonnet_4', 'grok_4']
       };
       
     } catch (error) {
@@ -69,61 +70,6 @@ export class EBRWVerifier {
         checks: ['error']
       };
     }
-  }
-
-  async deepPassVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
-    console.log('🔍 Running deep pass verification with Anthropic Opus...');
-    
-    const deepPrompt = `You are conducting a deep analysis pass of this SAT EBRW question. 
-
-Previous solver chose: ${solverResult.final}
-Evidence provided: ${JSON.stringify(solverResult.meta.evidence)}
-
-Conduct thorough analysis and provide detailed scoring.`;
-
-    try {
-      const response = await fetch('/api/anthropic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system: "You are an expert SAT EBRW analyzer. Provide detailed, careful analysis.",
-          messages: [{
-            role: 'user',
-            content: item.imageBase64 ? [
-              { type: 'text', text: deepPrompt },
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: this.detectMimeType(item.imageBase64),
-                  data: item.imageBase64
-                }
-              }
-            ] : deepPrompt
-          }],
-          max_tokens: 2000,
-          temperature: 0.05,
-          fullText: item.fullText,
-          imageBase64: item.imageBase64
-        }),
-        signal: AbortSignal.timeout(30000) // Increase to 30s
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const parsed = this.parseVerifierResponse(data.content);
-        return {
-          source: 'anthropic',
-          topChoice: parsed.best_choice,
-          score: parsed.scores[solverResult.final] || 0,
-          reasoning: parsed.reasoning + ' (Deep pass)'
-        };
-      }
-    } catch (error) {
-      console.warn('Deep pass verification failed:', error);
-    }
-
-    return this.fallbackVerification(solverResult, 'anthropic');
   }
 
   private verifyEvidence(evidence: string[], passageText: string): { valid: boolean; notes: string[] } {
@@ -158,19 +104,17 @@ Conduct thorough analysis and provide detailed scoring.`;
     return { valid, notes };
   }
 
-  private async anthropicVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
+  private async claudeVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
     try {
-      const response = await fetch('/api/anthropic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system: "You are an independent SAT EBRW judge. Analyze questions accurately and provide scoring.",
-          messages: [{
-            role: 'user',
-            content: item.imageBase64 ? [
-              {
-                type: 'text',
-                text: `Analyze this SAT EBRW question from the image and score each answer choice.
+      let messages;
+      
+      if (item.imageBase64) {
+        messages = [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this SAT EBRW question from the image and score each answer choice.
 
 ${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}
 
@@ -182,16 +126,19 @@ Return JSON:
   "best_choice": "A|B|C|D", 
   "reasoning": "Brief explanation for your choice"
 }`
-              },
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: this.detectMimeType(item.imageBase64),
-                  data: item.imageBase64
-                }
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${item.imageBase64}`
               }
-            ] : `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
+            }
+          ]
+        }];
+      } else {
+        messages = [{
+          role: 'user',
+          content: `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
 
 ${item.fullText}
 
@@ -203,78 +150,94 @@ Return JSON:
   "best_choice": "A|B|C|D",
   "reasoning": "Brief explanation for your choice"
 }`
-          }],
-          max_tokens: 1000,
-          temperature: 0.1,
-          fullText: item.fullText,
-          imageBase64: item.imageBase64
-        }),
-        signal: AbortSignal.timeout(25000) // Increase to 25s
+        }];
+      }
+
+      const response = await openrouterClient('anthropic/claude-sonnet-4', messages, {
+        max_tokens: 1000,
+        temperature: 0.1,
+        timeout_ms: 25000
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const parsed = this.parseVerifierResponse(data.content);
-        return {
-          source: 'anthropic',
-          topChoice: parsed.best_choice,
-          score: parsed.scores[solverResult.final] || 0,
-          reasoning: parsed.reasoning
-        };
-      } else {
-        console.warn('Anthropic verification failed:', response.status);
-      }
+      const parsed = this.parseVerifierResponse(response.text);
+      return {
+        source: 'claude-sonnet-4',
+        topChoice: parsed.best_choice,
+        score: parsed.scores[solverResult.final] || 0,
+        reasoning: parsed.reasoning
+      };
     } catch (error) {
-      console.warn('Anthropic verification error:', error);
+      console.warn('Claude verification error:', error);
+      return this.fallbackVerification(solverResult, 'claude-sonnet-4');
     }
-
-    return this.fallbackVerification(solverResult, 'anthropic');
   }
 
-  private async geminiVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
+  private async grokVerification(item: RoutedItem, solverResult: SolverResult): Promise<VerifierResult> {
     try {
-      const response = await fetch('/api/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'verify',
-          imageBase64: item.imageBase64,
-          ocrText: item.ocrText || item.fullText,
-          choices: item.choices,
-          claimedChoice: solverResult.final,
-          quotes: solverResult.meta.evidence || [],
-          maxOutputTokens: 4000,
-          temperature: 0.1
-        }),
-        signal: AbortSignal.timeout(20000) // Increase to 20s
+      let messages;
+      
+      if (item.imageBase64) {
+        messages = [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this SAT EBRW question from the image and score each answer choice.
+
+${item.ocrText ? `OCR Text (for reference): ${item.ocrText}` : ''}
+
+Proposed answer: ${solverResult.final}
+
+Return JSON:
+{
+  "scores": {"A": 0.0-1.0, "B": 0.0-1.0, "C": 0.0-1.0, "D": 0.0-1.0},
+  "best_choice": "A|B|C|D", 
+  "reasoning": "Brief explanation for your choice"
+}`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${item.imageBase64}`
+              }
+            }
+          ]
+        }];
+      } else {
+        messages = [{
+          role: 'user',
+          content: `You are an independent SAT EBRW judge. Score each option 0-1 and provide brief reasoning.
+
+${item.fullText}
+
+${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}
+
+Return JSON:
+{
+  "scores": {"A": 0.0-1.0, "B": 0.0-1.0, "C": 0.0-1.0, "D": 0.0-1.0},
+  "best_choice": "A|B|C|D",
+  "reasoning": "Brief explanation for your choice"
+}`
+        }];
+      }
+
+      const response = await openrouterClient('x-ai/grok-4', messages, {
+        max_tokens: 1000,
+        temperature: 0.1,
+        timeout_ms: 20000
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const parsed = this.parseVerifierResponse(data.content);
-        return {
-          source: 'gemini',
-          topChoice: parsed.best_choice,
-          score: parsed.scores[solverResult.final] || 0,
-          reasoning: parsed.reasoning
-        };
-      } else {
-        console.warn('Gemini verification failed:', response.status);
-      }
+      const parsed = this.parseVerifierResponse(response.text);
+      return {
+        source: 'grok-4',
+        topChoice: parsed.best_choice,
+        score: parsed.scores[solverResult.final] || 0,
+        reasoning: parsed.reasoning
+      };
     } catch (error) {
-      console.warn('Gemini verification error:', error);
+      console.warn('Grok verification error:', error);
+      return this.fallbackVerification(solverResult, 'grok-4');
     }
-
-    return this.fallbackVerification(solverResult, 'gemini');
-  }
-
-  private detectMimeType(base64Data: string): string {
-      if (base64Data.startsWith('iVBORw0KGgo')) {
-        return 'image/png';
-      } else if (base64Data.startsWith('/9j/')) {
-        return 'image/jpeg';
-      }
-      return 'image/png';
   }
 
   private parseVerifierResponse(content: string): any {
@@ -297,7 +260,7 @@ Return JSON:
     }
   }
 
-  private fallbackVerification(solverResult: SolverResult, source: 'anthropic' | 'gemini'): VerifierResult {
+  private fallbackVerification(solverResult: SolverResult, source: 'claude-sonnet-4' | 'grok-4'): VerifierResult {
     // Basic heuristic verification based on confidence and evidence quality
     let score = solverResult.confidence;
     

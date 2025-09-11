@@ -1,4 +1,5 @@
 import { RoutedItem, SolverResult } from '../../types/sat';
+import { openrouterClient } from './model-clients';
 
 const SYSTEM_EBRW = `You are an expert SAT EBRW solver with image analysis capabilities.
 
@@ -36,54 +37,51 @@ Required JSON schema:
   "elimination_notes": {"A": "...", "B": "...", "C": "...", "D": "..."}
 }`;
 
-export class EBRWSolver {
-  private openaiApiKey: string;
+// EBRW concurrent quartet models
+const EBRW_MODELS = [
+  'openai/o3',
+  'openai/gpt-5',
+  'x-ai/grok-4',
+  'anthropic/claude-sonnet-4'
+];
 
-  constructor() {
-    this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
-  }
+export class EBRWSolver {
+  constructor() {}
 
   async solve(item: RoutedItem, timeoutMs = 12000): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log('🔄 EBRW solver starting with timeout:', Math.min(timeoutMs, 45000));
+    console.log('🔄 EBRW solver starting concurrent quartet...');
     
     try {
-      // Primary solve with GPT-5 (low effort)
-      const primaryResult = await this.solvePrimary(item, Math.min(timeoutMs * 0.7, 30000));
+      // Dispatch all four models concurrently
+      const modelPromises = EBRW_MODELS.map(model => 
+        this.solveWithModel(item, model, Math.min(timeoutMs * 0.8, 35000))
+      );
       
-      // Check if escalation is needed
-      if (primaryResult.confidence < 0.75) {
-        console.log('🔄 EBRW escalating to GPT-5-Thinking...');
-        try {
-          const escalatedResult = await this.solveEscalated(item, Math.min(timeoutMs * 0.3, 20000));
-          
-          // Return the higher confidence result
-          const finalResult = {
-            ...escalatedResult,
-            meta: {
-              ...escalatedResult.meta,
-              primaryResult: primaryResult.final,
-              escalated: true
-            }
-          };
-          console.log(`✅ EBRW solved with escalation: ${finalResult.final} (${finalResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
-          return finalResult;
-        } catch (error) {
-          console.warn('EBRW escalation failed:', error);
-          primaryResult.meta.escalationFailed = true;
-        }
+      // Wait for all results
+      const results = await Promise.allSettled(modelPromises);
+      const successfulResults = results
+        .filter((result): result is PromiseFulfilledResult<SolverResult> => result.status === 'fulfilled')
+        .map(result => result.value);
+      
+      if (successfulResults.length === 0) {
+        throw new Error('All EBRW models failed');
       }
       
-      console.log(`✅ EBRW solved: ${primaryResult.final} (${primaryResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
-      return primaryResult;
+      // Select best result based on confidence and consensus
+      const bestResult = this.selectBestResult(successfulResults);
+      
+      console.log(`✅ EBRW solved: ${bestResult.final} (${bestResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
+      return bestResult;
+      
     } catch (error) {
       console.error('EBRW solver error:', error);
       throw error;
     }
   }
 
-  private async solvePrimary(item: RoutedItem, timeoutMs = 12000): Promise<SolverResult> {
-    console.log('🔄 EBRW primary solver starting with timeout:', timeoutMs);
+  private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
+    console.log(`🔄 EBRW solving with ${model}...`);
     
     let messages;
     
@@ -124,30 +122,13 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
       ];
     }
     
-    console.log('📡 Making OpenAI API call for EBRW solving...');
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-5',
-        messages,
-        temperature: 1,
-        max_completion_tokens: 2000,
-      }),
+    const response = await openrouterClient(model, messages, {
+      temperature: 0.1,
+      max_tokens: 2000,
+      timeout_ms: timeoutMs
     });
 
-    if (!response.ok) {
-      console.error('❌ OpenAI API error:', response.status, response.statusText);
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ OpenAI API response received');
-    let content = data.choices[0].message.content.trim();
+    let content = response.text;
     
     // Handle JSON markdown wrapper
     if (content.startsWith('```json')) {
@@ -167,97 +148,50 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
         evidence: result.evidence,
         elimination_notes: result.elimination_notes
       },
-      model: 'gpt-5'
+      model
     };
   }
 
-  private async solveEscalated(item: RoutedItem, timeoutMs = 10000): Promise<SolverResult> {
-    console.log('🔄 EBRW escalated solver starting with timeout:', timeoutMs);
-    
-    let messages;
-    
-    if (item.imageBase64) {
-      // Image-first approach for escalation
-      messages = [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `${SYSTEM_EBRW}
-
-Domain: ${item.subdomain}
-
-This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
-
-Extract the passage, question, and choices from this SAT image, then provide a thorough analysis. Focus on providing precise, short quotes as evidence.`
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${item.imageBase64}`
-              }
-            }
-          ]
-        }
-      ];
-    } else {
-      // Fallback to text-based escalation
-      const userPrompt = `Domain: ${item.subdomain}
-
-This question requires deeper analysis. Previous attempt had low confidence or ambiguity.
-
-${item.fullText}
-
-Choices:
-${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
-      
-      messages = [
-        { role: 'user', content: `${SYSTEM_EBRW}\n\n${userPrompt}` }
-      ];
+  private selectBestResult(results: SolverResult[]): SolverResult {
+    if (results.length === 1) {
+      return results[0];
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-5-thinking',
-        messages,
-        max_completion_tokens: 3000,
-        reasoning_effort: 'high'
-      }),
+    // Count votes for each answer
+    const voteCounts = new Map<string, number>();
+    const votesByAnswer = new Map<string, SolverResult[]>();
+    
+    results.forEach(result => {
+      const answer = result.final;
+      voteCounts.set(answer, (voteCounts.get(answer) || 0) + 1);
+      if (!votesByAnswer.has(answer)) {
+        votesByAnswer.set(answer, []);
+      }
+      votesByAnswer.get(answer)!.push(result);
     });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+    // Find the answer with the most votes
+    let maxVotes = 0;
+    let consensusAnswer = '';
+    
+    for (const [answer, votes] of voteCounts) {
+      if (votes > maxVotes) {
+        maxVotes = votes;
+        consensusAnswer = answer;
+      }
     }
 
-    const data = await response.json();
-    let content = data.choices[0].message.content.trim();
-    
-    // Handle JSON markdown wrapper
-    if (content.startsWith('```json')) {
-      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (content.startsWith('```')) {
-      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
+    // If we have a clear consensus (>50%), use the highest confidence result from that group
+    if (maxVotes > results.length / 2) {
+      const consensusResults = votesByAnswer.get(consensusAnswer)!;
+      return consensusResults.reduce((best, current) => 
+        current.confidence > best.confidence ? current : best
+      );
     }
-    
-    const result = JSON.parse(content);
-    
-    return {
-      final: result.final_choice,
-      confidence: Math.min(0.98, result.confidence_0_1 + 0.15), // Boost confidence for deep reasoning
-      meta: {
-        domain: result.domain,
-        explanation: result.short_explanation,
-        evidence: result.evidence,
-        elimination_notes: result.elimination_notes,
-        escalated: true
-      },
-      model: 'gpt-5-thinking'
-    };
+
+    // No clear consensus - return the highest confidence result overall
+    return results.reduce((best, current) => 
+      current.confidence > best.confidence ? current : best
+    );
   }
 }

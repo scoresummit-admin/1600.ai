@@ -32,17 +32,11 @@ export class SATEngine {
       p95_latency_ms: 0,
       escalation_rate: 0,
       model_usage: {
-        'gpt-5': 0,
-        'gpt-5-thinking': 0,
-        'o4-mini': 0,
-        'claude-opus-4-1-20250805': 0,
-        'claude-sonnet-4-20250514': 0,
-        'gemini-2.5-pro': 0,
-        'qwen2.5-math-72b': 0,
-        'deepseek-r1': 0,
-        'mistral-large': 0,
-        'qwen2.5-vl': 0,
-        'gpt-4o': 0
+        'openai/gpt-5': 0,
+        'openai/o3': 0,
+        'x-ai/grok-4': 0,
+        'deepseek/deepseek-r1': 0,
+        'anthropic/claude-sonnet-4': 0
       }
     };
   }
@@ -87,8 +81,8 @@ export class SATEngine {
       let verifierReport;
       
       if (routedItem.section === 'EBRW') {
-        // EBRW Pipeline: GPT-5 → Claude Verifier
-        console.log('📚 Solving EBRW question...');
+        // EBRW Pipeline: Concurrent quartet → Claude/Grok Verifier
+        console.log('📚 Solving EBRW question with concurrent quartet...');
         
         try {
           solverResult = await Promise.race([
@@ -103,10 +97,11 @@ export class SATEngine {
           throw error;
         }
         
-        this.metrics.model_usage['gpt-5']++;
-        if (solverResult.meta.escalated) {
-          this.metrics.model_usage['gpt-5-thinking']++;
-        }
+        // Update metrics for all EBRW models
+        this.metrics.model_usage['openai/o3']++;
+        this.metrics.model_usage['openai/gpt-5']++;
+        this.metrics.model_usage['x-ai/grok-4']++;
+        this.metrics.model_usage['anthropic/claude-sonnet-4']++;
         
         try {
           verifierReport = await Promise.race([
@@ -127,12 +122,13 @@ export class SATEngine {
           };
         }
         
-        this.metrics.model_usage['claude-opus-4-1-20250805']++;
-        this.metrics.model_usage['claude-opus-4-1-20250805']++;
+        // Additional verifier model usage
+        this.metrics.model_usage['anthropic/claude-sonnet-4']++;
+        this.metrics.model_usage['x-ai/grok-4']++;
         
       } else {
-        // Math Pipeline: o4-mini → Python → Math Verifier
-        console.log('🔢 Solving Math question...');
+        // Math Pipeline: Concurrent trio → Math Verifier
+        console.log('🔢 Solving Math question with concurrent trio...');
         
         try {
           solverResult = await Promise.race([
@@ -147,7 +143,10 @@ export class SATEngine {
           throw error;
         }
         
-        this.metrics.model_usage['o4-mini']++;
+        // Update metrics for all Math models
+        this.metrics.model_usage['openai/gpt-5']++;
+        this.metrics.model_usage['x-ai/grok-4']++;
+        this.metrics.model_usage['deepseek/deepseek-r1']++;
         
         try {
           verifierReport = await Promise.race([

@@ -1,4 +1,5 @@
 import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../../types/sat';
+import { openrouterClient } from './model-clients';
 
 const SYSTEM_ROUTER = `You are an expert SAT question classifier. Analyze the question and return ONLY classification labels.
 
@@ -23,11 +24,7 @@ Required JSON output (classification ONLY - do not modify text):
 }`;
 
 export class SATRouter {
-  private openaiApiKey: string;
-
-  constructor() {
-    this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
-  }
+  constructor() {}
 
   async routeItem(item: SatItem): Promise<RoutedItem> {
     const startTime = Date.now();
@@ -46,23 +43,23 @@ export class SATRouter {
         const ocrResults = await this.dualOCR(item.imageBase64);
         
         // Reconcile OCR results
-        ocrText = ocrResults.openai.text.length > ocrResults.gemini.text.length 
-          ? ocrResults.openai.text 
-          : ocrResults.gemini.text;
+        ocrText = ocrResults.gpt5.text.length > ocrResults.grok4.text.length 
+          ? ocrResults.gpt5.text 
+          : ocrResults.grok4.text;
         
         // Set fullText from OCR for backward compatibility
         promptText = ocrText;
         
         // Use choices from the result with more choices, or combine if different
-        if (ocrResults.openai.choices.length >= ocrResults.gemini.choices.length) {
-          choices = ocrResults.openai.choices;
+        if (ocrResults.gpt5.choices.length >= ocrResults.grok4.choices.length) {
+          choices = ocrResults.gpt5.choices;
         } else {
-          choices = ocrResults.gemini.choices;
+          choices = ocrResults.grok4.choices;
         }
         
         // Mark as having figure if OCR results differ significantly
-        hasFigure = Math.abs(ocrResults.openai.text.length - ocrResults.gemini.text.length) > 50 ||
-                   ocrResults.openai.choices.length !== ocrResults.gemini.choices.length;
+        hasFigure = Math.abs(ocrResults.gpt5.text.length - ocrResults.grok4.text.length) > 50 ||
+                   ocrResults.gpt5.choices.length !== ocrResults.grok4.choices.length;
       }
 
       // Classify with GPT-5 (prefer image if available)
@@ -91,131 +88,60 @@ export class SATRouter {
   }
 
   private async dualOCR(imageBase64: string): Promise<{
-    openai: { text: string; choices: string[] };
-    gemini: { text: string; choices: string[] };
+    gpt5: { text: string; choices: string[] };
+    grok4: { text: string; choices: string[] };
   }> {
-    const [openaiResult, geminiResult] = await Promise.allSettled([
-      this.extractWithOpenAI(imageBase64),
-      this.extractWithGemini(imageBase64)
+    const [gpt5Result, grok4Result] = await Promise.allSettled([
+      this.extractWithModel(imageBase64, 'openai/gpt-5'),
+      this.extractWithModel(imageBase64, 'x-ai/grok-4')
     ]);
 
     return {
-      openai: openaiResult.status === 'fulfilled' ? openaiResult.value : { text: '', choices: [] },
-      gemini: geminiResult.status === 'fulfilled' ? geminiResult.value : { text: '', choices: [] }
+      gpt5: gpt5Result.status === 'fulfilled' ? gpt5Result.value : { text: '', choices: [] },
+      grok4: grok4Result.status === 'fulfilled' ? grok4Result.value : { text: '', choices: [] }
     };
   }
 
-  private async extractWithOpenAI(imageBase64: string): Promise<{ text: string; choices: string[] }> {
+  private async extractWithModel(imageBase64: string, model: string): Promise<{ text: string; choices: string[] }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.openaiApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`
-                }
-              }
-            ]
-          }],
-          max_tokens: 2000,
-          temperature: 0.1
-        }),
-        signal: controller.signal
+      const response = await openrouterClient(model, [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${imageBase64}`
+            }
+          }
+        ]
+      }], {
+        max_tokens: 2000,
+        temperature: 0.1,
+        timeout_ms: 30000
       });
 
       clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`OpenAI Vision API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const content = data.choices[0].message.content;
       
       try {
-        const parsed = JSON.parse(content);
+        const parsed = JSON.parse(response.text);
         const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
         return {
           text: fullText,
           choices: parsed.choices || []
         };
       } catch {
-        return { text: content, choices: [] };
+        return { text: response.text, choices: [] };
       }
     } catch (error) {
       clearTimeout(timeoutId);
       throw error;
-    }
-  }
-
-  private async extractWithGemini(imageBase64: string): Promise<{ text: string; choices: string[] }> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // Increase to 60s timeout
-
-    try {
-      console.log('🔄 Starting Gemini OCR extraction...');
-      
-      // Call our serverless function with proper image data
-      const response = await fetch('/api/google', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          mode: 'extract',
-          imageBase64: imageBase64,
-          temperature: 0.1,
-          maxOutputTokens: 6000
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-      
-      console.log(`📡 Gemini API response status: ${response.status}`);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Gemini API error:', response.status, response.statusText, errorData);
-        throw new Error(`Google API error: ${response.statusText} - ${errorData.error || 'Unknown error'} - ${errorData.details || ''}`);
-      }
-
-      const data = await response.json();
-      const content = data.content;
-      
-      console.log('✅ Gemini OCR completed, processing response...');
-      
-      try {
-        const parsed = JSON.parse(content);
-        const fullText = parsed.passage ? `${parsed.passage}\n\nQuestion: ${parsed.question}` : parsed.text || '';
-        return {
-          text: fullText,
-          choices: parsed.choices || []
-        };
-      } catch {
-        console.warn('⚠️ Failed to parse Gemini JSON response, using raw content');
-        return { text: content, choices: [] };
-      }
-    } catch (error) {
-      clearTimeout(timeoutId);
-      console.error('❌ Gemini extraction failed:', error instanceof Error ? error.message : 'Unknown error');
-      throw error instanceof Error ? error : new Error('Unknown error occurred');
     }
   }
 
@@ -267,29 +193,15 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
         ];
       }
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.openaiApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages,
-          temperature: 0.1,
-          max_tokens: 800,
-        }),
-        signal: controller.signal
+      const response = await openrouterClient('openai/gpt-5', messages, {
+        temperature: 0.1,
+        max_tokens: 800,
+        timeout_ms: 30000
       });
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      let content = data.choices[0].message.content.trim();
+      let content = response.text;
       
       // Handle JSON markdown wrapper
       if (content.startsWith('```json')) {

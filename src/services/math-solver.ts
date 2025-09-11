@@ -1,5 +1,6 @@
 import { RoutedItem, SolverResult } from '../../types/sat';
 import { runPython } from '../lib/pythonSandbox';
+import { openrouterClient } from './model-clients';
 
 const SYSTEM_MATH = `You are an expert SAT Math solver with Python programming capabilities.
 
@@ -43,50 +44,50 @@ result = simplified"
 
 Always include working Python code that can be executed to verify your answer.`;
 
-export class MathSolver {
-  private openaiApiKey: string;
+// Math concurrent trio models
+const MATH_MODELS = [
+  'openai/gpt-5',
+  'x-ai/grok-4',
+  'deepseek/deepseek-r1'
+];
 
-  constructor() {
-    this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
-  }
+export class MathSolver {
+  constructor() {}
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log('🔄 Math solver starting...');
+    console.log('🔄 Math solver starting concurrent trio...');
     
     try {
-      // Primary solve with o4-mini + Python
-      const primaryResult = await this.solvePrimary(item);
+      // Dispatch all three models concurrently
+      const modelPromises = MATH_MODELS.map(model => 
+        this.solveWithModel(item, model, 40000) // 40s timeout per model
+      );
       
-      // Check if escalation is needed
-      if (primaryResult.confidence < 0.75) {
-        console.log('🔄 Math escalating to GPT-5-Thinking...');
-        try {
-          const escalatedResult = await this.solveEscalated(item);
-          
-          // Return the higher confidence result
-          const finalResult = escalatedResult.confidence > primaryResult.confidence ? escalatedResult : primaryResult;
-          finalResult.meta.primaryResult = primaryResult.final;
-          finalResult.meta.escalated = true;
-          
-          console.log(`✅ Math solved with escalation: ${finalResult.final} (${finalResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
-          return finalResult;
-        } catch (error) {
-          console.warn('Math escalation failed:', error);
-          primaryResult.meta.escalationFailed = true;
-        }
+      // Wait for all results
+      const results = await Promise.allSettled(modelPromises);
+      const successfulResults = results
+        .filter((result): result is PromiseFulfilledResult<SolverResult> => result.status === 'fulfilled')
+        .map(result => result.value);
+      
+      if (successfulResults.length === 0) {
+        throw new Error('All Math models failed');
       }
       
-      console.log(`✅ Math solved: ${primaryResult.final} (${primaryResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
-      return primaryResult;
+      // Select best result based on Python verification and consensus
+      const bestResult = await this.selectBestMathResult(successfulResults, item);
+      
+      console.log(`✅ Math solved: ${bestResult.final} (${bestResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
+      return bestResult;
+      
     } catch (error) {
       console.error('Math solver error:', error);
       throw error;
     }
   }
 
-  private async solvePrimary(item: RoutedItem): Promise<SolverResult> {
-    console.log('🔄 Math primary solver starting...');
+  private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
+    console.log(`🔄 Math solving with ${model}...`);
     
     let messages;
     
@@ -134,29 +135,13 @@ MUST include working Python code that sets 'result' variable.`;
       ];
     }
     
-    console.log('📡 Making OpenAI API call for Math solving...');
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'o1-mini',
-        messages,
-        // o1 models don't use temperature - they use reasoning_effort
-      }),
+    const response = await openrouterClient(model, messages, {
+      temperature: 0.1,
+      max_tokens: 3000,
+      timeout_ms: timeoutMs
     });
 
-    if (!response.ok) {
-      console.error('❌ OpenAI API error:', response.status, response.statusText);
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ OpenAI API response received');
-    let content = data.choices[0].message.content.trim();
+    let content = response.text;
     
     // Handle JSON markdown wrapper
     if (content.startsWith('```json')) {
@@ -173,40 +158,40 @@ MUST include working Python code that sets 'result' variable.`;
     let finalConfidence = result.confidence;
     
     if (result.python_code) {
-      console.log('🐍 Executing Python verification code...');
+      console.log(`🐍 Executing Python verification code for ${model}...`);
       try {
         pythonResult = await runPython(result.python_code);
         
         if (pythonResult.ok) {
           const pythonAnswer = String(pythonResult.result);
-          console.log(`🐍 Python result: ${pythonAnswer}, Model answer: ${finalAnswer}`);
+          console.log(`🐍 ${model} Python result: ${pythonAnswer}, Model answer: ${finalAnswer}`);
           
           // Smart comparison between Python result and model answer
           if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
-            console.log('✅ Python verification confirms model answer');
+            console.log(`✅ ${model} Python verification confirms model answer`);
             finalConfidence = Math.min(0.98, finalConfidence + 0.20); // +20% boost for Python confirmation
           } else {
             // Check if Python result matches any of the choices
             const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
             if (matchingChoice) {
-              console.log(`🔄 Python result matches choice ${matchingChoice}, overriding model answer`);
+              console.log(`🔄 ${model} Python result matches choice ${matchingChoice}, overriding model answer`);
               finalAnswer = matchingChoice;
               finalConfidence = Math.min(0.95, finalConfidence + 0.15); // +15% boost but override answer
             } else {
-              console.log(`⚠️ Python result (${pythonAnswer}) doesn't match model answer (${finalAnswer}) or any choice`);
+              console.log(`⚠️ ${model} Python result (${pythonAnswer}) doesn't match model answer (${finalAnswer}) or any choice`);
               finalConfidence *= 0.8; // Reduce confidence for disagreement
             }
           }
         } else {
-          console.log(`❌ Python execution failed: ${pythonResult.error}`);
+          console.log(`❌ ${model} Python execution failed: ${pythonResult.error}`);
           finalConfidence *= 0.85; // Small penalty for failed Python execution
         }
       } catch (error) {
-        console.error('Python execution error:', error);
+        console.error(`${model} Python execution error:`, error);
         finalConfidence *= 0.85;
       }
     } else {
-      console.log('⚠️ No Python code provided by model');
+      console.log(`⚠️ ${model} No Python code provided`);
       finalConfidence *= 0.8; // Penalty for not providing Python code
     }
     
@@ -220,129 +205,61 @@ MUST include working Python code that sets 'result' variable.`;
         pythonResult: pythonResult,
         checks: ['python_execution', 'symbolic_verification']
       },
-      model: 'o4-mini'
+      model
     };
   }
 
-  private async solveEscalated(item: RoutedItem): Promise<SolverResult> {
-    console.log('🔄 Math escalated solver starting...');
+  private async selectBestMathResult(results: SolverResult[], item: RoutedItem): Promise<SolverResult> {
+    if (results.length === 1) {
+      return results[0];
+    }
+
+    // Prioritize results with successful Python verification
+    const verifiedResults = results.filter(r => r.meta.pythonResult?.ok);
     
-    let messages;
-    
-    if (item.imageBase64) {
-      messages = [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `${SYSTEM_MATH}
-
-Domain: ${item.subdomain}
-
-This math problem requires deeper analysis. Previous attempt had low confidence.
-
-Solve this SAT math question from the image. MUST include working Python code.`
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${item.imageBase64}`
-              }
-            }
-          ]
-        }
-      ];
-    } else {
-      const userPrompt = `Domain: ${item.subdomain}
-
-This math problem requires deeper analysis. Previous attempt had low confidence.
-
-${item.fullText}
-
-${item.choices.length > 0 ? 
-  `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` :
-  'This is a grid-in question - provide the numeric answer.'
-}
-
-MUST include working Python code that sets 'result' variable.`;
+    if (verifiedResults.length > 0) {
+      // Among verified results, look for consensus
+      const voteCounts = new Map<string, number>();
+      const votesByAnswer = new Map<string, SolverResult[]>();
       
-      messages = [
-        { role: 'user', content: `${SYSTEM_MATH}\n\n${userPrompt}` }
-      ];
-    }
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-5-thinking',
-        messages,
-        max_completion_tokens: 3000,
-        reasoning_effort: 'high'
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    let content = data.choices[0].message.content.trim();
-    
-    // Handle JSON markdown wrapper
-    if (content.startsWith('```json')) {
-      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (content.startsWith('```')) {
-      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
-    }
-    
-    const result = JSON.parse(content);
-    
-    // Execute Python code
-    let pythonResult = null;
-    let finalAnswer = result.answer;
-    let finalConfidence = Math.min(0.98, result.confidence + 0.10); // Boost for deep reasoning
-    
-    if (result.python_code) {
-      try {
-        pythonResult = await runPython(result.python_code);
-        
-        if (pythonResult.ok) {
-          const pythonAnswer = String(pythonResult.result);
-          if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
-            finalConfidence = Math.min(0.99, finalConfidence + 0.15);
-          } else {
-            const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
-            if (matchingChoice) {
-              finalAnswer = matchingChoice;
-              finalConfidence = Math.min(0.97, finalConfidence + 0.10);
-            } else {
-              finalConfidence *= 0.85;
-            }
-          }
+      verifiedResults.forEach(result => {
+        const answer = result.final;
+        voteCounts.set(answer, (voteCounts.get(answer) || 0) + 1);
+        if (!votesByAnswer.has(answer)) {
+          votesByAnswer.set(answer, []);
         }
-      } catch (error) {
-        finalConfidence *= 0.9;
+        votesByAnswer.get(answer)!.push(result);
+      });
+
+      // Find consensus among verified results
+      let maxVotes = 0;
+      let consensusAnswer = '';
+      
+      for (const [answer, votes] of voteCounts) {
+        if (votes > maxVotes) {
+          maxVotes = votes;
+          consensusAnswer = answer;
+        }
       }
+
+      // If we have consensus among verified results, use highest confidence from that group
+      if (maxVotes > 1) {
+        const consensusResults = votesByAnswer.get(consensusAnswer)!;
+        return consensusResults.reduce((best, current) => 
+          current.confidence > best.confidence ? current : best
+        );
+      }
+
+      // No consensus among verified - return highest confidence verified result
+      return verifiedResults.reduce((best, current) => 
+        current.confidence > best.confidence ? current : best
+      );
     }
-    
-    return {
-      final: finalAnswer,
-      confidence: Math.max(0.2, finalConfidence),
-      meta: {
-        method: result.method,
-        explanation: result.explanation,
-        python: result.python_code,
-        pythonResult: pythonResult,
-        escalated: true,
-        checks: ['python_execution', 'deep_reasoning']
-      },
-      model: 'gpt-5-thinking'
-    };
+
+    // No verified results - fall back to highest confidence overall
+    return results.reduce((best, current) => 
+      current.confidence > best.confidence ? current : best
+    );
   }
 
   private compareAnswers(pythonAnswer: string, modelAnswer: string, choices: string[]): boolean {
