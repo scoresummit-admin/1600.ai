@@ -50,7 +50,7 @@ export class MathSolver {
     this.openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
   }
 
-  async solve(item: RoutedItem, timeoutMs = 45000): Promise<SolverResult> {
+  async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
     console.log('🔄 Math solver starting...');
     
