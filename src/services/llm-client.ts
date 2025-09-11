@@ -25,7 +25,7 @@ export class LLMClient {
     } = {}
   ): Promise<{ content: string; usage?: any }> {
     const startTime = Date.now();
-    const timeout = options.timeout_ms || 55000;
+    const timeout = options.timeout_ms || 75000;
 
     try {
       const timeoutPromise = new Promise((_, reject) =>

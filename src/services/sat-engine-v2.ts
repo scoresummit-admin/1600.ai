@@ -48,7 +48,7 @@ export class SATEngine {
     correctAnswer?: string
   ): Promise<AggregatedAnswer> {
     const startTime = Date.now();
-    const maxTimeMs = 60000; // Hard 60s limit (1 minute as requested)
+    const maxTimeMs = 90000; // Hard 90s limit (1.5 minutes for better model completion)
     
     try {
       console.log('🚀 Starting 1600.ai high-accuracy pipeline...');
@@ -67,7 +67,7 @@ export class SATEngine {
       const routedItem = await Promise.race([
         this.router.routeItem(item),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Router timeout')), 40000) // 40s for routing
+          setTimeout(() => reject(new Error('Router timeout')), 50000) // 50s for routing
         )
       ]);
       
@@ -86,9 +86,9 @@ export class SATEngine {
         
         try {
           solverResult = await Promise.race([
-            this.ebrwSolver.solve(routedItem, Math.min(remainingTime * 0.7, 50000)), // Up to 50s
+            this.ebrwSolver.solve(routedItem, Math.min(remainingTime * 0.7, 70000)), // Up to 70s
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('EBRW solver timeout')), Math.min(remainingTime * 0.7, 50000))
+              setTimeout(() => reject(new Error('EBRW solver timeout')), Math.min(remainingTime * 0.7, 70000))
             )
           ]);
           console.log(`✅ EBRW solver completed: ${solverResult.final} (${solverResult.confidence.toFixed(2)} confidence)`);
@@ -118,7 +118,7 @@ export class SATEngine {
           verifierReport = await Promise.race([
             this.ebrwVerifier.verify(routedItem, solverResult),
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('EBRW verifier timeout')), Math.min(remainingTime * 0.3, 40000))
+              setTimeout(() => reject(new Error('EBRW verifier timeout')), Math.min(remainingTime * 0.3, 50000))
             )
           ]);
           console.log(`✅ EBRW verifier completed: ${verifierReport.passed ? 'PASSED' : 'FAILED'} (${verifierReport.score.toFixed(2)})`);
@@ -145,7 +145,7 @@ export class SATEngine {
           solverResult = await Promise.race([
             this.mathSolver.solve(routedItem), // Math solver handles its own timeouts
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Math solver timeout')), Math.min(remainingTime * 0.8, 55000))
+              setTimeout(() => reject(new Error('Math solver timeout')), Math.min(remainingTime * 0.8, 70000))
             )
           ]);
           console.log(`✅ Math solver completed: ${solverResult.final} (${solverResult.confidence.toFixed(2)} confidence)`);
@@ -175,7 +175,7 @@ export class SATEngine {
           verifierReport = await Promise.race([
             this.mathVerifier.verify(routedItem, solverResult),
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Math verifier timeout')), Math.min(remainingTime * 0.2, 35000))
+              setTimeout(() => reject(new Error('Math verifier timeout')), Math.min(remainingTime * 0.2, 50000))
             )
           ]);
           console.log(`✅ Math verifier completed: ${verifierReport.passed ? 'PASSED' : 'FAILED'} (${verifierReport.score.toFixed(2)})`);

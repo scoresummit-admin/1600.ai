@@ -50,11 +50,12 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem, timeoutMs = 50000): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log(`🔄 EBRW solver starting concurrent quartet (${timeoutMs}ms timeout)...`);
+    const actualTimeout = Math.max(timeoutMs, 70000); // Ensure minimum 70s for EBRW
+    console.log(`🔄 EBRW solver starting concurrent quartet (${actualTimeout}ms timeout)...`);
     
     try {
       // Dispatch all four models concurrently
-      const individualTimeout = Math.min(timeoutMs * 0.8, 45000); // 80% of total timeout, max 45s
+      const individualTimeout = Math.min(actualTimeout * 0.8, 60000); // 80% of total timeout, max 60s
       const modelPromises = EBRW_MODELS.map(model => 
         this.solveWithModelSafe(item, model, individualTimeout)
       );
@@ -63,7 +64,7 @@ export class EBRWSolver {
       const results = await Promise.race([
         Promise.allSettled(modelPromises),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('EBRW concurrent timeout')), timeoutMs)
+          setTimeout(() => reject(new Error('EBRW concurrent timeout')), actualTimeout)
         )
       ]);
       

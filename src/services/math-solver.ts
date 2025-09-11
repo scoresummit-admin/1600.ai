@@ -56,12 +56,12 @@ export class MathSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 50000; // 50s total timeout
+    const timeoutMs = 70000; // 70s total timeout
     console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms timeout)...`);
     
     try {
       // Dispatch all three models concurrently
-      const individualTimeout = Math.min(timeoutMs * 0.8, 45000); // 80% of total timeout, max 45s
+      const individualTimeout = Math.min(timeoutMs * 0.8, 60000); // 80% of total timeout, max 60s
       const modelPromises = MATH_MODELS.map(model => 
         this.solveWithModelSafe(item, model, individualTimeout)
       );

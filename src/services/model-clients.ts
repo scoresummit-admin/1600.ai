@@ -21,7 +21,7 @@ export async function openrouterClient(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), options.timeout_ms || 55000);
+  const timeoutId = setTimeout(() => controller.abort(), options.timeout_ms || 75000);
 
   try {
     const requestBody: any = {

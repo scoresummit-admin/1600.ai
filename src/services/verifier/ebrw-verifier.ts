@@ -156,7 +156,7 @@ Return JSON:
       const response = await openrouterClient('anthropic/claude-sonnet-4', messages, {
         max_tokens: 1000,
         temperature: 0.1,
-        timeout_ms: 40000
+        timeout_ms: 50000
       });
 
       const parsed = this.parseVerifierResponse(response.text);

@@ -104,7 +104,7 @@ export class SATRouter {
 
   private async extractWithModel(imageBase64: string, model: string): Promise<{ text: string; choices: string[] }> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
     try {
       const response = await openrouterClient(model, [{
@@ -124,7 +124,7 @@ export class SATRouter {
       }], {
         max_tokens: 2000,
         temperature: 0.1,
-        timeout_ms: 45000,
+        timeout_ms: 60000,
         // Prefer Azure for OpenAI models for better latency
         ...(model.startsWith('openai/') ? {
           provider: { order: ['azure', 'openai'] }
