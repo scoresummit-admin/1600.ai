@@ -20,10 +20,16 @@ export async function openrouterClient(
     throw new Error('VITE_OPENROUTER_API_KEY not configured');
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), options.timeout_ms || 55000);
-
   try {
+      temperature: options.temperature || 0.1,
+      max_tokens: options.max_tokens || 3000,
+    };
+
+    // Add provider preferences if specified
+    if (options.provider) {
+      requestBody.provider = options.provider;
+    }
+
     const requestBody: any = {
       model,
       messages,
@@ -36,14 +42,13 @@ export async function openrouterClient(
       requestBody.provider = options.provider;
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options.timeout_ms || 55000);
+
+    const response = await fetch('/api/openrouter/route', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://1600.ai',
-        'X-Title': '1600.ai SAT Solver',
-        ...(model.startsWith('openai/') ? { 'OpenRouter-Prefer-Providers': 'azure,openai' } : {})
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal
@@ -53,7 +58,7 @@ export async function openrouterClient(
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(`OpenRouter proxy error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();

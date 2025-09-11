@@ -8,7 +8,7 @@ export class LLMClient {
     this.config = config;
     
     // Use environment variables as fallback
-    if (!this.config.openrouter_api_key && (import.meta.env.VITE_OPENROUTER_API_KEY || '')) {
+    if (!this.config.openrouter_api_key && import.meta.env.VITE_OPENROUTER_API_KEY) {
       this.config.openrouter_api_key = import.meta.env.VITE_OPENROUTER_API_KEY || '';
     }
   }
@@ -50,10 +50,6 @@ export class LLMClient {
     messages: Array<{ role: string; content: string | Array<any> }>,
     options: any
   ): Promise<{ content: string; usage?: any }> {
-    if (!this.config.openrouter_api_key) {
-      throw new Error('OpenRouter API key not configured');
-    }
-
     // Configure Azure preference for all OpenAI models for better latency
     const providerConfig: any = {};
     if (model.startsWith('openai/')) {

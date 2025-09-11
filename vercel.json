@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/openrouter/route",
+      "destination": "/api/openrouter/route.py"
+    },
+    {
       "source": "/api/py/exec",
       "destination": "/api/py/exec.py"
     },
