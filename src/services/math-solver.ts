@@ -75,7 +75,7 @@ export class MathSolver {
       }
       
       // Select best result based on Python verification and consensus
-      const bestResult = await this.selectBestMathResult(successfulResults, item);
+      const bestResult = await this.selectBestMathResult(successfulResults);
       
       console.log(`✅ Math solved: ${bestResult.final} (${bestResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
       return bestResult;
@@ -209,7 +209,7 @@ MUST include working Python code that sets 'result' variable.`;
     };
   }
 
-  private async selectBestMathResult(results: SolverResult[], item: RoutedItem): Promise<SolverResult> {
+  private async selectBestMathResult(results: SolverResult[]): Promise<SolverResult> {
     if (results.length === 1) {
       return results[0];
     }
