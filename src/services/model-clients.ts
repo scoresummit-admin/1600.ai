@@ -20,11 +20,14 @@ export async function openrouterClient(
     throw new Error('VITE_OPENROUTER_API_KEY not configured');
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeout_ms || 55000);
+
   try {
     const requestBody: any = {
       model,
       messages,
-      temperature: options.temperature || 0.1,
+      temperature: options.temperature || 0.05,
       max_tokens: options.max_tokens || 3000,
     };
 
@@ -33,26 +36,19 @@ export async function openrouterClient(
       requestBody.provider = options.provider;
     }
 
-    const requestBody: any = {
-      model,
-      messages,
-      temperature: options.temperature || 0.1,
-      max_tokens: options.max_tokens || 3000,
+    // Prepare headers with conditional Azure preference
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
     };
 
-    // Add provider preferences if specified
-    if (options.provider) {
-      requestBody.provider = options.provider;
+    // Add Azure preference for OpenAI models
+    if (model.startsWith('openai/')) {
+      headers['OpenRouter-Prefer-Providers'] = 'azure,openai';
     }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), options.timeout_ms || 55000);
 
     const response = await fetch('/api/openrouter/route', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal: controller.signal
     });
