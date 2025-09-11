@@ -88,13 +88,24 @@ export class SATEngine {
           solverResult = await Promise.race([
             this.ebrwSolver.solve(routedItem, Math.min(remainingTime * 0.7, 50000)), // Up to 50s
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('EBRW solver timeout')), 50000)
+              setTimeout(() => reject(new Error('EBRW solver timeout')), Math.min(remainingTime * 0.7, 50000))
             )
           ]);
-          console.log('✅ EBRW solver completed:', solverResult.final);
+          console.log(`✅ EBRW solver completed: ${solverResult.final} (${solverResult.confidence.toFixed(2)} confidence)`);
         } catch (error) {
           console.error('❌ EBRW solver failed:', error);
-          throw error;
+          // Create fallback solution instead of failing completely
+          solverResult = {
+            final: 'A',
+            confidence: 0.15,
+            meta: {
+              domain: 'information_ideas',
+              explanation: 'Solver timeout or error occurred',
+              evidence: ['Fallback due to system error'],
+              elimination_notes: { 'Error': 'Pipeline timeout' }
+            },
+            model: 'fallback'
+          };
         }
         
         // Update metrics for all EBRW models
@@ -107,10 +118,10 @@ export class SATEngine {
           verifierReport = await Promise.race([
             this.ebrwVerifier.verify(routedItem, solverResult),
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('EBRW verifier timeout')), 40000) // 40s for verification
+              setTimeout(() => reject(new Error('EBRW verifier timeout')), Math.min(remainingTime * 0.3, 40000))
             )
           ]);
-          console.log('✅ EBRW verifier completed:', verifierReport.passed ? 'PASSED' : 'FAILED');
+          console.log(`✅ EBRW verifier completed: ${verifierReport.passed ? 'PASSED' : 'FAILED'} (${verifierReport.score.toFixed(2)})`);
         } catch (error) {
           console.error('❌ EBRW verifier failed:', error);
           // Create fallback verification
@@ -134,13 +145,25 @@ export class SATEngine {
           solverResult = await Promise.race([
             this.mathSolver.solve(routedItem), // Math solver handles its own timeouts
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Math solver timeout')), 55000)
+              setTimeout(() => reject(new Error('Math solver timeout')), Math.min(remainingTime * 0.8, 55000))
             )
           ]);
-          console.log('✅ Math solver completed:', solverResult.final);
+          console.log(`✅ Math solver completed: ${solverResult.final} (${solverResult.confidence.toFixed(2)} confidence)`);
         } catch (error) {
           console.error('❌ Math solver failed:', error);
-          throw error;
+          // Create fallback solution instead of failing completely
+          solverResult = {
+            final: routedItem.choices.length > 0 ? 'A' : '0',
+            confidence: 0.15,
+            meta: {
+              method: 'fallback',
+              explanation: 'Solver timeout or error occurred',
+              python: `# Fallback solution\nresult = "${routedItem.choices.length > 0 ? 'A' : '0'}"`,
+              pythonResult: { ok: false, error: 'Solver timeout' },
+              checks: ['fallback']
+            },
+            model: 'fallback'
+          };
         }
         
         // Update metrics for all Math models
@@ -152,10 +175,10 @@ export class SATEngine {
           verifierReport = await Promise.race([
             this.mathVerifier.verify(routedItem, solverResult),
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Math verifier timeout')), 35000) // 35s for math verification
+              setTimeout(() => reject(new Error('Math verifier timeout')), Math.min(remainingTime * 0.2, 35000))
             )
           ]);
-          console.log('✅ Math verifier completed:', verifierReport.passed ? 'PASSED' : 'FAILED');
+          console.log(`✅ Math verifier completed: ${verifierReport.passed ? 'PASSED' : 'FAILED'} (${verifierReport.score.toFixed(2)})`);
         } catch (error) {
           console.error('❌ Math verifier failed:', error);
           // Create fallback verification

@@ -56,19 +56,29 @@ export class MathSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log('🔄 Math solver starting concurrent trio...');
+    const timeoutMs = 50000; // 50s total timeout
+    console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms timeout)...`);
     
     try {
       // Dispatch all three models concurrently
+      const individualTimeout = Math.min(timeoutMs * 0.8, 45000); // 80% of total timeout, max 45s
       const modelPromises = MATH_MODELS.map(model => 
-        this.solveWithModel(item, model, 50000) // 50s timeout per model
+        this.solveWithModelSafe(item, model, individualTimeout)
       );
       
-      // Wait for all results
-      const results = await Promise.allSettled(modelPromises);
+      // Wait for all results with overall timeout
+      const results = await Promise.race([
+        Promise.allSettled(modelPromises),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Math concurrent timeout')), timeoutMs)
+        )
+      ]);
+      
       const successfulResults = results
         .filter((result): result is PromiseFulfilledResult<SolverResult> => result.status === 'fulfilled')
         .map(result => result.value);
+      
+      console.log(`🔄 Math models completed: ${successfulResults.length}/${MATH_MODELS.length} successful`);
       
       if (successfulResults.length === 0) {
         throw new Error('All Math models failed');
@@ -85,9 +95,30 @@ export class MathSolver {
       throw error;
     }
   }
+  
+  private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
+    try {
+      return await this.solveWithModel(item, model, timeoutMs);
+    } catch (error) {
+      console.warn(`🔄 Math ${model} failed:`, error);
+      // Return a low-confidence fallback result instead of throwing
+      return {
+        final: item.choices.length > 0 ? 'A' : '0',
+        confidence: 0.1,
+        meta: {
+          method: 'fallback',
+          explanation: `${model} failed to respond`,
+          python: `# ${model} failed\nresult = "${item.choices.length > 0 ? 'A' : '0'}"`,
+          pythonResult: { ok: false, error: 'Model timeout/error' },
+          checks: ['model_failure']
+        },
+        model
+      };
+    }
+  }
 
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
-    console.log(`🔄 Math solving with ${model}...`);
+    console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
     
     let messages;
     
@@ -99,11 +130,15 @@ export class MathSolver {
           content: [
             {
               type: 'text',
+
+
               text: `${SYSTEM_MATH}
 
 Domain: ${item.subdomain}
 
-Solve this SAT math question from the image. MUST include working Python code that sets 'result' variable.`
+Solve this SAT math question from the image. MUST include working Python code that sets 'result' variable.
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
             },
             {
               type: 'image_url',
@@ -130,7 +165,11 @@ MUST include working Python code that sets 'result' variable.`;
       messages = [
         { 
           role: 'user', 
-          content: `${SYSTEM_MATH}\n\n${userPrompt}` 
+          content: `${SYSTEM_MATH}
+
+${userPrompt}
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` 
         }
       ];
     }

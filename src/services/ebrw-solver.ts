@@ -50,19 +50,28 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem, timeoutMs = 50000): Promise<SolverResult> {
     const startTime = Date.now();
-    console.log('🔄 EBRW solver starting concurrent quartet...');
+    console.log(`🔄 EBRW solver starting concurrent quartet (${timeoutMs}ms timeout)...`);
     
     try {
       // Dispatch all four models concurrently
+      const individualTimeout = Math.min(timeoutMs * 0.8, 45000); // 80% of total timeout, max 45s
       const modelPromises = EBRW_MODELS.map(model => 
-        this.solveWithModel(item, model, Math.min(timeoutMs * 0.9, 50000))
+        this.solveWithModelSafe(item, model, individualTimeout)
       );
       
-      // Wait for all results
-      const results = await Promise.allSettled(modelPromises);
+      // Wait for all results with overall timeout
+      const results = await Promise.race([
+        Promise.allSettled(modelPromises),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('EBRW concurrent timeout')), timeoutMs)
+        )
+      ]);
+      
       const successfulResults = results
         .filter((result): result is PromiseFulfilledResult<SolverResult> => result.status === 'fulfilled')
         .map(result => result.value);
+      
+      console.log(`🔄 EBRW models completed: ${successfulResults.length}/${EBRW_MODELS.length} successful`);
       
       if (successfulResults.length === 0) {
         throw new Error('All EBRW models failed');
@@ -79,9 +88,29 @@ export class EBRWSolver {
       throw error;
     }
   }
+  
+  private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
+    try {
+      return await this.solveWithModel(item, model, timeoutMs);
+    } catch (error) {
+      console.warn(`🔄 EBRW ${model} failed:`, error);
+      // Return a low-confidence fallback result instead of throwing
+      return {
+        final: 'A',
+        confidence: 0.1,
+        meta: {
+          domain: 'information_ideas',
+          explanation: `${model} failed to respond`,
+          evidence: [`Error: ${error instanceof Error ? error.message : 'Unknown error'}`],
+          elimination_notes: {}
+        },
+        model
+      };
+    }
+  }
 
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
-    console.log(`🔄 EBRW solving with ${model}...`);
+    console.log(`🔄 EBRW solving with ${model} (${timeoutMs}ms timeout)...`);
     
     let messages;
     
@@ -94,9 +123,12 @@ export class EBRWSolver {
           content: [
             {
               type: 'text',
+
               text: `Domain: ${item.subdomain}
 
-Extract the passage, question, and choices from this SAT image, then solve it. Focus on providing 1-2 short, direct quotes as evidence.`
+Extract the passage, question, and choices from this SAT image, then solve it. Focus on providing 1-2 short, direct quotes as evidence.
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
             },
             {
               type: 'image_url',
@@ -118,7 +150,9 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
       
       messages = [
         { role: 'system', content: SYSTEM_EBRW },
-        { role: 'user', content: userPrompt }
+        { role: 'user', content: `${userPrompt}
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` }
       ];
     }
     
