@@ -43,7 +43,7 @@ export async function openrouterClient(
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://1600.ai',
         'X-Title': '1600.ai SAT Solver',
-        'OpenRouter-Prefer-Providers': model.startsWith('openai/') ? 'azure,openai' : undefined
+        ...(model.startsWith('openai/') ? { 'OpenRouter-Prefer-Providers': 'azure,openai' } : {})
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal
