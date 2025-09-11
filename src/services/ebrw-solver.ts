@@ -48,14 +48,14 @@ const EBRW_MODELS = [
 export class EBRWSolver {
   constructor() {}
 
-  async solve(item: RoutedItem, timeoutMs = 12000): Promise<SolverResult> {
+  async solve(item: RoutedItem, timeoutMs = 50000): Promise<SolverResult> {
     const startTime = Date.now();
     console.log('🔄 EBRW solver starting concurrent quartet...');
     
     try {
       // Dispatch all four models concurrently
       const modelPromises = EBRW_MODELS.map(model => 
-        this.solveWithModel(item, model, Math.min(timeoutMs * 0.8, 35000))
+        this.solveWithModel(item, model, Math.min(timeoutMs * 0.9, 50000))
       );
       
       // Wait for all results
@@ -123,9 +123,13 @@ ${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)
     }
     
     const response = await openrouterClient(model, messages, {
-      temperature: 0.1,
-      max_tokens: 2000,
-      timeout_ms: timeoutMs
+      temperature: 0.05,
+      max_tokens: 3000,
+      timeout_ms: timeoutMs,
+      // Prefer Azure for OpenAI models for better latency
+      ...(model.startsWith('openai/') ? {
+        provider: { order: ['azure', 'openai'] }
+      } : {})
     });
 
     let content = response.text;

@@ -104,7 +104,7 @@ export class SATRouter {
 
   private async extractWithModel(imageBase64: string, model: string): Promise<{ text: string; choices: string[] }> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
 
     try {
       const response = await openrouterClient(model, [{
@@ -124,7 +124,11 @@ export class SATRouter {
       }], {
         max_tokens: 2000,
         temperature: 0.1,
-        timeout_ms: 30000
+        timeout_ms: 45000,
+        // Prefer Azure for OpenAI models for better latency
+        ...(model.startsWith('openai/') ? {
+          provider: { order: ['azure', 'openai'] }
+        } : {})
       });
 
       clearTimeout(timeoutId);
@@ -155,7 +159,7 @@ export class SATRouter {
     hasFigure: boolean;
   }> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 40000); // 40s timeout
 
     try {
       let messages;
@@ -196,7 +200,8 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       const response = await openrouterClient('openai/gpt-5', messages, {
         temperature: 0.1,
         max_tokens: 800,
-        timeout_ms: 30000
+        timeout_ms: 40000,
+        provider: { order: ['azure', 'openai'] }
       });
 
       clearTimeout(timeoutId);

@@ -156,7 +156,7 @@ Return JSON:
       const response = await openrouterClient('anthropic/claude-sonnet-4', messages, {
         max_tokens: 1000,
         temperature: 0.1,
-        timeout_ms: 25000
+        timeout_ms: 40000
       });
 
       const parsed = this.parseVerifierResponse(response.text);
@@ -224,7 +224,7 @@ Return JSON:
       const response = await openrouterClient('x-ai/grok-4', messages, {
         max_tokens: 1000,
         temperature: 0.1,
-        timeout_ms: 20000
+        timeout_ms: 35000
       });
 
       const parsed = this.parseVerifierResponse(response.text);

@@ -61,7 +61,7 @@ export class MathSolver {
     try {
       // Dispatch all three models concurrently
       const modelPromises = MATH_MODELS.map(model => 
-        this.solveWithModel(item, model, 40000) // 40s timeout per model
+        this.solveWithModel(item, model, 50000) // 50s timeout per model
       );
       
       // Wait for all results
@@ -136,9 +136,13 @@ MUST include working Python code that sets 'result' variable.`;
     }
     
     const response = await openrouterClient(model, messages, {
-      temperature: 0.1,
-      max_tokens: 3000,
-      timeout_ms: timeoutMs
+      temperature: 0.05,
+      max_tokens: 4000,
+      timeout_ms: timeoutMs,
+      // Prefer Azure for OpenAI models for better latency
+      ...(model.startsWith('openai/') ? {
+        provider: { order: ['azure', 'openai'] }
+      } : {})
     });
 
     let content = response.text;

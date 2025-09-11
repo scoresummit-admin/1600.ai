@@ -25,7 +25,7 @@ export class LLMClient {
     } = {}
   ): Promise<{ content: string; usage?: any }> {
     const startTime = Date.now();
-    const timeout = options.timeout_ms || 30000;
+    const timeout = options.timeout_ms || 55000;
 
     try {
       const timeoutPromise = new Promise((_, reject) =>
@@ -54,11 +54,12 @@ export class LLMClient {
       throw new Error('OpenRouter API key not configured');
     }
 
-    // Configure provider preferences for specific models
+    // Configure Azure preference for all OpenAI models for better latency
     const providerConfig: any = {};
-    if (model === 'openai/gpt-5') {
+    if (model.startsWith('openai/')) {
       providerConfig.provider = {
-        order: ['azure', 'openai']
+        order: ['azure', 'openai'],
+        require_parameters: false
       };
     }
 
