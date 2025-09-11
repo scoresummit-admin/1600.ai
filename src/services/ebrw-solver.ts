@@ -50,36 +50,24 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem, timeoutMs = 50000): Promise<SolverResult> {
     const startTime = Date.now();
-    const actualTimeout = Math.max(timeoutMs, 70000); // Ensure minimum 70s for EBRW
-    console.log(`🔄 EBRW solver starting concurrent quartet (${actualTimeout}ms timeout)...`);
+    const actualTimeout = Math.min(timeoutMs, 45000); // Cap at 45s for speed
+    console.log(`🔄 EBRW solver starting concurrent quartet with early return (${actualTimeout}ms timeout)...`);
     
     try {
-      // Dispatch all four models concurrently
-      const individualTimeout = Math.min(actualTimeout * 0.8, 60000); // 80% of total timeout, max 60s
-      const modelPromises = EBRW_MODELS.map(model => 
-        this.solveWithModelSafe(item, model, individualTimeout)
-      );
+      // Dispatch all four models concurrently with aggressive timeouts
+      const individualTimeout = Math.min(actualTimeout * 0.7, 35000); // 70% of total timeout, max 35s
       
-      // Wait for all results with overall timeout
-      const results = await Promise.race([
-        Promise.allSettled(modelPromises),
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('EBRW concurrent timeout')), actualTimeout)
-        )
-      ]);
+      // Return as soon as we get 2+ successful results OR all complete OR timeout
+      const results = await this.raceForResults(item, individualTimeout, actualTimeout);
       
-      const successfulResults = results
-        .filter((result): result is PromiseFulfilledResult<SolverResult> => result.status === 'fulfilled')
-        .map(result => result.value);
+      console.log(`🔄 EBRW models completed: ${results.length}/${EBRW_MODELS.length} successful`);
       
-      console.log(`🔄 EBRW models completed: ${successfulResults.length}/${EBRW_MODELS.length} successful`);
-      
-      if (successfulResults.length === 0) {
+      if (results.length === 0) {
         throw new Error('All EBRW models failed');
       }
       
       // Select best result based on confidence and consensus
-      const bestResult = this.selectBestResult(successfulResults);
+      const bestResult = this.selectBestResult(results);
       
       console.log(`✅ EBRW solved: ${bestResult.final} (${bestResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
       return bestResult;
@@ -90,6 +78,70 @@ export class EBRWSolver {
     }
   }
   
+  private async raceForResults(item: RoutedItem, individualTimeout: number, totalTimeout: number): Promise<SolverResult[]> {
+    const results: SolverResult[] = [];
+    const promises = EBRW_MODELS.map((model, index) => 
+      this.solveWithModelSafe(item, model, individualTimeout).then(result => ({
+        result,
+        index,
+        model
+      }))
+    );
+    
+    return new Promise((resolve, reject) => {
+      let completed = 0;
+      let hasResolved = false;
+      
+      // Overall timeout
+      const timeoutId = setTimeout(() => {
+        if (!hasResolved) {
+          hasResolved = true;
+          if (results.length > 0) {
+            console.log(`⏱️ EBRW timeout with ${results.length} results, proceeding...`);
+            resolve(results);
+          } else {
+            reject(new Error('EBRW total timeout with no results'));
+          }
+        }
+      }, totalTimeout);
+      
+      promises.forEach(promise => {
+        promise.then(({ result }) => {
+          if (!hasResolved && result.confidence > 0.15) { // Filter out obvious fallbacks
+            results.push(result);
+            console.log(`✅ EBRW ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
+            
+            // Return early if we have 2+ good results or 3+ any results
+            if ((results.length >= 2 && results.some(r => r.confidence > 0.7)) || 
+                results.length >= 3) {
+              hasResolved = true;
+              clearTimeout(timeoutId);
+              console.log(`🚀 EBRW early return with ${results.length} results`);
+              resolve(results);
+              return;
+            }
+          }
+          
+          completed++;
+          // If all models completed, return what we have
+          if (completed >= EBRW_MODELS.length && !hasResolved) {
+            hasResolved = true;
+            clearTimeout(timeoutId);
+            resolve(results);
+          }
+        }).catch(error => {
+          console.warn(`EBRW model failed:`, error);
+          completed++;
+          if (completed >= EBRW_MODELS.length && !hasResolved) {
+            hasResolved = true;
+            clearTimeout(timeoutId);
+            resolve(results);
+          }
+        });
+      });
+    });
+  }
+
   private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     try {
       return await this.solveWithModel(item, model, timeoutMs);

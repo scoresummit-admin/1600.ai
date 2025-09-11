@@ -91,20 +91,41 @@ export class SATRouter {
     gpt5: { text: string; choices: string[] };
     grok4: { text: string; choices: string[] };
   }> {
-    const [gpt5Result, grok4Result] = await Promise.allSettled([
-      this.extractWithModel(imageBase64, 'openai/gpt-5'),
-      this.extractWithModel(imageBase64, 'x-ai/grok-4')
-    ]);
+    // Use Promise.race to get the first successful OCR result, fallback to both if needed
+    const timeout = 12000; // 12s timeout per OCR call
+    
+    try {
+      // Try to get the first successful result quickly
+      const firstResult = await Promise.race([
+        this.extractWithModel(imageBase64, 'openai/gpt-5', timeout),
+        this.extractWithModel(imageBase64, 'x-ai/grok-4', timeout),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('OCR race timeout')), timeout))
+      ]);
+      
+      // Got a quick result, use it for both (we'll improve this later)
+      console.log('🔥 Fast OCR completed, using for both results');
+      return {
+        gpt5: firstResult,
+        grok4: firstResult
+      };
+    } catch (error) {
+      console.log('⚠️ Fast OCR failed, falling back to parallel OCR...');
+      // Fallback to parallel execution with shorter timeouts
+      const [gpt5Result, grok4Result] = await Promise.allSettled([
+        this.extractWithModel(imageBase64, 'openai/gpt-5', 8000),
+        this.extractWithModel(imageBase64, 'x-ai/grok-4', 8000)
+      ]);
 
-    return {
-      gpt5: gpt5Result.status === 'fulfilled' ? gpt5Result.value : { text: '', choices: [] },
-      grok4: grok4Result.status === 'fulfilled' ? grok4Result.value : { text: '', choices: [] }
-    };
+      return {
+        gpt5: gpt5Result.status === 'fulfilled' ? gpt5Result.value : { text: '', choices: [] },
+        grok4: grok4Result.status === 'fulfilled' ? grok4Result.value : { text: '', choices: [] }
+      };
+    }
   }
 
-  private async extractWithModel(imageBase64: string, model: string): Promise<{ text: string; choices: string[] }> {
+  private async extractWithModel(imageBase64: string, model: string, timeoutMs: number = 10000): Promise<{ text: string; choices: string[] }> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await openrouterClient(model, [{

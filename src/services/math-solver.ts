@@ -56,36 +56,24 @@ export class MathSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 70000; // 70s total timeout
-    console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms timeout)...`);
+    const timeoutMs = 45000; // 45s total timeout for speed
+    console.log(`🔄 Math solver starting concurrent trio with early return (${timeoutMs}ms timeout)...`);
     
     try {
-      // Dispatch all three models concurrently
-      const individualTimeout = Math.min(timeoutMs * 0.8, 60000); // 80% of total timeout, max 60s
-      const modelPromises = MATH_MODELS.map(model => 
-        this.solveWithModelSafe(item, model, individualTimeout)
-      );
+      // Dispatch all three models concurrently with aggressive timeouts
+      const individualTimeout = Math.min(timeoutMs * 0.7, 35000); // 70% of total timeout, max 35s
       
-      // Wait for all results with overall timeout
-      const results = await Promise.race([
-        Promise.allSettled(modelPromises),
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Math concurrent timeout')), timeoutMs)
-        )
-      ]);
+      // Return as soon as we get 2+ successful results OR all complete OR timeout
+      const results = await this.raceForResults(item, individualTimeout, timeoutMs);
       
-      const successfulResults = results
-        .filter((result): result is PromiseFulfilledResult<SolverResult> => result.status === 'fulfilled')
-        .map(result => result.value);
+      console.log(`🔄 Math models completed: ${results.length}/${MATH_MODELS.length} successful`);
       
-      console.log(`🔄 Math models completed: ${successfulResults.length}/${MATH_MODELS.length} successful`);
-      
-      if (successfulResults.length === 0) {
+      if (results.length === 0) {
         throw new Error('All Math models failed');
       }
       
       // Select best result based on Python verification and consensus
-      const bestResult = await this.selectBestMathResult(successfulResults);
+      const bestResult = await this.selectBestMathResult(results);
       
       console.log(`✅ Math solved: ${bestResult.final} (${bestResult.confidence.toFixed(2)}) in ${Date.now() - startTime}ms`);
       return bestResult;
@@ -96,6 +84,72 @@ export class MathSolver {
     }
   }
   
+  private async raceForResults(item: RoutedItem, individualTimeout: number, totalTimeout: number): Promise<SolverResult[]> {
+    const results: SolverResult[] = [];
+    const promises = MATH_MODELS.map((model, index) => 
+      this.solveWithModelSafe(item, model, individualTimeout).then(result => ({
+        result,
+        index,
+        model
+      }))
+    );
+    
+    return new Promise((resolve, reject) => {
+      let completed = 0;
+      let hasResolved = false;
+      
+      // Overall timeout
+      const timeoutId = setTimeout(() => {
+        if (!hasResolved) {
+          hasResolved = true;
+          if (results.length > 0) {
+            console.log(`⏱️ Math timeout with ${results.length} results, proceeding...`);
+            resolve(results);
+          } else {
+            reject(new Error('Math total timeout with no results'));
+          }
+        }
+      }, totalTimeout);
+      
+      promises.forEach(promise => {
+        promise.then(({ result }) => {
+          if (!hasResolved && result.confidence > 0.15) { // Filter out obvious fallbacks
+            results.push(result);
+            console.log(`✅ Math ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
+            
+            // Return early if we have 2+ good results (especially with Python verification)
+            const pythonVerified = results.filter(r => r.meta.pythonResult?.ok).length;
+            if ((pythonVerified >= 2) || 
+                (results.length >= 2 && results.some(r => r.confidence > 0.8)) ||
+                results.length >= 3) {
+              hasResolved = true;
+              clearTimeout(timeoutId);
+              console.log(`🚀 Math early return with ${results.length} results (${pythonVerified} Python verified)`);
+              resolve(results);
+              return;
+            }
+          }
+          
+          completed++;
+          // If all models completed, return what we have
+          if (completed >= MATH_MODELS.length && !hasResolved) {
+            hasResolved = true;
+            clearTimeout(timeoutId);
+            resolve(results);
+          }
+        }).catch(error => {
+          console.warn(`Math model failed:`, error);
+          completed++;
+          if (completed >= MATH_MODELS.length && !hasResolved) {
+            hasResolved = true;
+            clearTimeout(timeoutId);
+            resolve(results);
+          }
+        });
+      });
+    });
+  }
+
   private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     try {
       return await this.solveWithModel(item, model, timeoutMs);
