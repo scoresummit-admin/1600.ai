@@ -174,8 +174,10 @@ export class MathSolver {
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
     
-      ];
-    }
+    const messages = [
+      { role: 'system', content: SYSTEM_MATH },
+      { role: 'user', content: `Problem: ${item.question}\n\nChoices:\n${item.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}\n\nSolve this step-by-step with Python code.` }
+    ];
     
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,
