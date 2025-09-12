@@ -31,10 +31,9 @@ export class SATEngine {
       escalation_rate: 0,
       model_usage: {
         'openai/gpt-5': 0,
-        'openai/o3': 0,
         'x-ai/grok-4': 0,
-        'qwen/qwen3-235b-a22b-thinking-2507': 0,
-        'anthropic/claude-sonnet-4': 0
+        'anthropic/claude-opus-4.1': 0,
+        'anthropic/claude-4.1-sonnet': 0
       }
     };
   }
