@@ -69,15 +69,16 @@ export class MathSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 60000; // 60s overall budget
+    const timeoutMs = 75000; // 75s overall budget - more time for Grok
     console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms overall)...`);
 
     try {
       // Dispatch all three models concurrently
-      const individualTimeout = Math.min(timeoutMs - 5000, 55000); // leave buffer for aggregation
+      const individualTimeout = Math.min(timeoutMs - 5000, 65000); // leave buffer for aggregation
 
       const results = await this.runConcurrentModels(item, individualTimeout);
       console.log(`🔄 Math models completed: ${results.length}/${MATH_MODELS.length} successful`);
+      console.log(`🔄 Math individual results:`, results.map(r => `${r.model}: ${r.final} (${(r.confidence * 100).toFixed(1)}%)`));
 
       if (results.length === 0) {
         throw new Error('All Math models failed');
@@ -96,11 +97,24 @@ export class MathSolver {
   }
 
   private async runConcurrentModels(item: RoutedItem, timeoutMs: number): Promise<SolverResult[]> {
-    const promises = MATH_MODELS.map(model => this.solveWithModelSafe(item, model, timeoutMs));
+    // Wait for all models to complete, don't use Promise.allSettled which might timeout early
+    const results: SolverResult[] = [];
+    const promises = MATH_MODELS.map(async (model, index) => {
+      try {
+        const result = await this.solveWithModelSafe(item, model, timeoutMs);
+        console.log(`✅ Math ${model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
+        return result;
+      } catch (error) {
+        console.warn(`❌ Math ${model} failed:`, error);
+        return null;
+      }
+    });
+    
     const settled = await Promise.allSettled(promises);
     return settled
       .filter((r): r is PromiseFulfilledResult<SolverResult> => r.status === 'fulfilled')
-      .map(r => r.value);
+      .map(r => r.value)
+      .filter(r => r !== null);
   }
 
   private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
@@ -266,7 +280,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     const verifiedResults = results.filter(r => r.meta.pythonResult?.ok);
     
     if (verifiedResults.length > 0) {
-      // Among verified results, look for consensus
+      console.log(`🔄 Math ${verifiedResults.length} results have Python verification`);
+      
+      // Among verified results, look for majority vote
       const voteCounts = new Map<string, number>();
       const votesByAnswer = new Map<string, SolverResult[]>();
       
@@ -279,33 +295,57 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         votesByAnswer.get(answer)!.push(result);
       });
 
-      // Find consensus among verified results
+      // Find majority among verified results
       let maxVotes = 0;
-      let consensusAnswer = '';
+      let majorityAnswer = '';
       
       for (const [answer, votes] of voteCounts) {
         if (votes > maxVotes) {
           maxVotes = votes;
-          consensusAnswer = answer;
+          majorityAnswer = answer;
         }
       }
 
-      // If we have consensus among verified results, use highest confidence from that group
-      if (maxVotes > 1) {
-        const consensusResults = votesByAnswer.get(consensusAnswer)!;
-        return consensusResults.reduce((best, current) => 
-          current.confidence > best.confidence ? current : best
-        );
-      }
+      console.log(`🔄 Math verified vote breakdown:`, Array.from(voteCounts.entries()).map(([ans, count]) => `${ans}: ${count} votes`));
+      console.log(`🔄 Math verified majority winner: ${majorityAnswer} with ${maxVotes} votes`);
 
-      // No consensus among verified - return highest confidence verified result
-      return verifiedResults.reduce((best, current) => 
+      // Use majority from verified results (even if just 1, pick highest confidence)
+      const majorityResults = votesByAnswer.get(majorityAnswer)!;
+      return majorityResults.reduce((best, current) => 
         current.confidence > best.confidence ? current : best
       );
     }
 
-    // No verified results - fall back to highest confidence overall
-    return results.reduce((best, current) => 
+    // No verified results - do majority voting on all results
+    console.log(`🔄 Math no Python verification, using all ${results.length} results for majority vote`);
+    
+    const voteCounts = new Map<string, number>();
+    const votesByAnswer = new Map<string, SolverResult[]>();
+    
+    results.forEach(result => {
+      const answer = result.final;
+      voteCounts.set(answer, (voteCounts.get(answer) || 0) + 1);
+      if (!votesByAnswer.has(answer)) {
+        votesByAnswer.set(answer, []);
+      }
+      votesByAnswer.get(answer)!.push(result);
+    });
+
+    let maxVotes = 0;
+    let majorityAnswer = '';
+    
+    for (const [answer, votes] of voteCounts) {
+      if (votes > maxVotes) {
+        maxVotes = votes;
+        majorityAnswer = answer;
+      }
+    }
+
+    console.log(`🔄 Math all results vote breakdown:`, Array.from(voteCounts.entries()).map(([ans, count]) => `${ans}: ${count} votes`));
+    console.log(`🔄 Math all results majority winner: ${majorityAnswer} with ${maxVotes} votes`);
+
+    const majorityResults = votesByAnswer.get(majorityAnswer)!;
+    return majorityResults.reduce((best, current) => 
       current.confidence > best.confidence ? current : best
     );
   }

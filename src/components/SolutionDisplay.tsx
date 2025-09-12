@@ -68,8 +68,11 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution }) =>
       {/* Model Votes */}
       <div className="space-y-3">
         <h3 className="font-medium text-slate-800">
-          {solution.timeMs >= 1000 ? `${(solution.timeMs / 1000).toFixed(1)}s` : `${solution.timeMs}ms`}
+          Model Results
         </h3>
+        <div className="text-sm text-slate-600 mb-2">
+          Solved in {solution.timeMs >= 1000 ? `${(solution.timeMs / 1000).toFixed(1)}s` : `${solution.timeMs}ms`}
+        </div>
         <div className="text-sm text-slate-600">
           {solution.modelVotes.length} model{solution.modelVotes.length !== 1 ? 's' : ''}
         </div>
@@ -78,14 +81,21 @@ export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution }) =>
           {solution.modelVotes.map((vote: any, index: number) => (
             <div key={index} className="bg-slate-50 p-3 rounded-lg">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-slate-800">{vote.model}</span>
+                <span className="font-medium text-slate-800">
+                  {vote.model.replace('anthropic/', '').replace('openai/', '').replace('x-ai/', '')}
+                </span>
                 <div className="flex items-center gap-2">
-                  <span className={`font-medium ${getConfidenceColor(vote.confidence)}`}>
-                    {vote.final}
+                  <span className={`font-bold text-lg ${vote.final === solution.answer ? 'text-success-600' : 'text-slate-400'}`}>
+                    {vote.final} 
                   </span>
                   <span className="text-sm text-slate-500">
                     {Math.round(vote.confidence * 100)}%
                   </span>
+                  {vote.final === solution.answer && (
+                    <span className="text-xs bg-success-100 text-success-700 px-2 py-1 rounded-full">
+                      ✓ Winner
+                    </span>
+                  )}
                 </div>
               </div>
               <p className="text-sm text-slate-600 mb-2">{vote.meta.explanation}</p>

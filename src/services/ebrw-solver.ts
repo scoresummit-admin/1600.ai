@@ -71,16 +71,17 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 40000; // 40s total timeout
-    console.log(`🔄 EBRW solver starting concurrent quartet (${timeoutMs}ms timeout)...`);
+    const timeoutMs = 60000; // 60s total timeout - more time for Grok
+    console.log(`🔄 EBRW solver starting concurrent trio (${timeoutMs}ms timeout)...`);
     
     try {
       // Dispatch all four models concurrently
-      const individualTimeout = Math.min(timeoutMs * 0.8, 32000); // 80% of total timeout, max 32s
+      const individualTimeout = Math.min(timeoutMs * 0.9, 50000); // 90% of total timeout, max 50s
       
       const results = await this.raceForResults(item, individualTimeout, timeoutMs);
       
       console.log(`🔄 EBRW models completed: ${results.length}/${EBRW_MODELS.length} successful`);
+      console.log(`🔄 EBRW individual results:`, results.map(r => `${r.model}: ${r.final} (${(r.confidence * 100).toFixed(1)}%)`));
       
       if (results.length === 0) {
         throw new Error('All EBRW models failed');
@@ -116,7 +117,7 @@ export class EBRWSolver {
         if (!hasResolved) {
           hasResolved = true;
           if (results.length > 0) {
-            console.log(`⏱️ EBRW timeout with ${results.length} results, proceeding...`);
+            console.log(`⏱️ EBRW timeout after ${totalTimeout}ms with ${results.length} results, proceeding...`);
             resolve(results);
           } else {
             reject(new Error('EBRW total timeout with no results'));
@@ -130,24 +131,24 @@ export class EBRWSolver {
             results.push(result);
             console.log(`✅ EBRW ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
             
-            // Return early if we have 3+ good results or all completed
-            if (results.length >= 3 || completed >= EBRW_MODELS.length - 1) {
+            // Wait for all models to complete or significant time has passed
+            completed++;
+            if (completed >= EBRW_MODELS.length) {
               hasResolved = true;
               clearTimeout(timeoutId);
-              console.log(`🚀 EBRW early return with ${results.length} results`);
+              console.log(`🚀 EBRW all models completed with ${results.length} results`);
               resolve(results);
-              return;
+            }
+          } else {
+            completed++;
+            if (completed >= EBRW_MODELS.length && !hasResolved) {
+              hasResolved = true;
+              clearTimeout(timeoutId);
+              resolve(results);
             }
           }
-          
-          completed++;
-          if (completed >= EBRW_MODELS.length && !hasResolved) {
-            hasResolved = true;
-            clearTimeout(timeoutId);
-            resolve(results);
-          }
         }).catch(error => {
-          console.warn(`EBRW model failed:`, error);
+          console.warn(`🔄 EBRW model failed:`, error);
           completed++;
           if (completed >= EBRW_MODELS.length && !hasResolved) {
             hasResolved = true;
@@ -264,7 +265,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       return results[0];
     }
 
-    // Look for consensus among results
+    // Implement proper majority voting
     const voteCounts = new Map<string, number>();
     const votesByAnswer = new Map<string, SolverResult[]>();
     
@@ -277,28 +278,24 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       votesByAnswer.get(answer)!.push(result);
     });
 
-    // Find consensus
+    // Find majority vote
     let maxVotes = 0;
-    let consensusAnswer = '';
+    let majorityAnswer = '';
     
     for (const [answer, votes] of voteCounts) {
       if (votes > maxVotes) {
         maxVotes = votes;
-        consensusAnswer = answer;
+        majorityAnswer = answer;
       }
     }
 
-    // If we have consensus, use highest confidence from that group
-    if (maxVotes > 1) {
-      const consensusResults = votesByAnswer.get(consensusAnswer)!;
-      return consensusResults.reduce((best, current) => 
-        current.confidence > best.confidence ? current : best
-      );
-    }
+    console.log(`🔄 EBRW vote breakdown:`, Array.from(voteCounts.entries()).map(([ans, count]) => `${ans}: ${count} votes`));
+    console.log(`🔄 EBRW majority winner: ${majorityAnswer} with ${maxVotes} votes`);
 
-    // No consensus - return highest confidence overall
-    return results.reduce((best, current) => 
-      current.confidence > best.confidence ? current : best
+    // Use majority vote (even if it's just 1 vote, pick the one with highest confidence)
+    const majorityResults = votesByAnswer.get(majorityAnswer)!;
+    return majorityResults.reduce((best, current) => 
+        current.confidence > best.confidence ? current : best
     );
   }
 }
