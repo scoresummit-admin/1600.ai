@@ -29,7 +29,7 @@ export class SATRouter {
     return routedItem;
   }
 
-  private classifySection(text: string, choices: string[]): Section {
+  private classifySection(text: string, _choices: string[]): Section {
     const lowerText = text.toLowerCase();
     
     // Math keywords
@@ -65,7 +65,7 @@ export class SATRouter {
     }
   }
 
-  private classifySubdomain(text: string, section: Section, isGridIn: boolean): EbrwDomain | MathDomain {
+  private classifySubdomain(text: string, section: Section, _isGridIn: boolean): EbrwDomain | MathDomain {
     const lowerText = text.toLowerCase();
 
     if (section === 'MATH') {

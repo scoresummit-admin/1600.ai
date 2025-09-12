@@ -239,10 +239,11 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     // Execute Python code if provided
     if (result.python_code) {
       try {
-        pythonResult = await runPython(result.python_code);
+        const pythonExecResult = await runPython(result.python_code);
+        pythonResult = pythonExecResult;
         
-        if (pythonResult.ok) {
-          const pythonAnswer = String(pythonResult.result).trim();
+        if (pythonExecResult.ok) {
+          const pythonAnswer = String(pythonExecResult.result).trim();
           console.log(`🐍 ${model} Python result: ${pythonAnswer}`);
           
           // Compare Python result with model answer

@@ -99,7 +99,7 @@ export class MathVerifier {
     };
   }
 
-  private compareAnswers(pythonAnswer: string, modelAnswer: string, choices: string[]): boolean {
+  private compareAnswers(pythonAnswer: string, modelAnswer: string, _choices: string[]): boolean {
     const cleanPython = pythonAnswer.trim().toLowerCase();
     const cleanModel = modelAnswer.trim().toLowerCase();
     
