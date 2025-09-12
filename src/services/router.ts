@@ -1,5 +1,21 @@
 import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../types/sat';
 
+export const SYSTEM_ROUTER = `You are an expert SAT question router. Classify only the labels needed by the app. Some models may receive images; if so, you may use them to determine has_figure.
+
+Output Contract
+Return ONLY this JSON (no prose or markdown):
+{
+"section": "EBRW|Math",
+"subdomain": "craft_structure|information_ideas|standard_english_conventions|expression_of_ideas|algebra|advanced_math|problem_solving_data_analysis|geometry_trigonometry",
+"has_figure": true|false
+}
+
+Notes
+Section must be exactly "EBRW" or "Math" (case-sensitive).
+Math subdomains: use the exact strings above (no abbreviations).
+Set has_figure = true iff the question meaningfully relies on a chart, graph, diagram, or figure.
+If the prompt is text-only (including OCR), set has_figure to false.`;
+
 export class SATRouter {
   constructor() {}
 
