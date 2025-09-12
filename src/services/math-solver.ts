@@ -220,6 +220,39 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       // Prefer Azure for OpenAI models for better latency
       ...(model.startsWith('openai/') ? {
         provider: { order: ['azure', 'openai'] }
+      } : {})
+    });
+    
+    let result;
+    try {
+      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
+      result = JSON.parse(cleanedResponse);
+    } catch (error) {
+      console.error(`${model} JSON parse error:`, error);
+      throw new Error(`Invalid JSON response from ${model}`);
+    }
+    
+    let finalAnswer = result.answer;
+    let finalConfidence = result.confidence || 0.5;
+    let pythonResult = { ok: false, error: 'No Python code' };
+    
+    // Execute Python code if provided
+    if (result.python_code) {
+      try {
+        pythonResult = await runPython(result.python_code);
+        
+        if (pythonResult.ok) {
+          const pythonAnswer = String(pythonResult.result).trim();
+          console.log(`🐍 ${model} Python result: ${pythonAnswer}`);
+          
+          // Compare Python result with model answer
+          if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
+            console.log(`✅ ${model} Python result matches model answer`);
+            finalConfidence = Math.min(0.95, finalConfidence + 0.1); // +10% boost for verification
+          } else {
+            // Check if Python result matches any choice
+            const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
+            if (matchingChoice) {
               console.log(`🔄 ${model} Python result matches choice ${matchingChoice}, overriding model answer`);
               finalAnswer = matchingChoice;
               finalConfidence = Math.min(0.95, finalConfidence + 0.15); // +15% boost but override answer
