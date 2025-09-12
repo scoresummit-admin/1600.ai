@@ -12,7 +12,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleQuestionSubmit = async (
-    imageBase64: string,
+    imageDataUrl: string,
     section: Section,
     correctAnswer?: string
   ) => {
@@ -20,7 +20,7 @@ function App() {
     setSolution(null);
 
     try {
-      const result = await satEngine.solveQuestion(imageBase64, section, correctAnswer);
+      const result = await satEngine.solveQuestion(imageDataUrl, section, correctAnswer);
       setSolution(result);
     } catch (error) {
       console.error('Error solving question:', error);

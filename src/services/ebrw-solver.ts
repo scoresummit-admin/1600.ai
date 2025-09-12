@@ -200,7 +200,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
           {
             type: 'image_url',
             image_url: {
-              url: `data:image/jpeg;base64,${item.imageBase64}`
+              url: item.imageBase64
             }
           }
         ]

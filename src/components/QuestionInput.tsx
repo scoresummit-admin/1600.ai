@@ -4,23 +4,23 @@ import { ImageUpload } from './ImageUpload';
 import { Section } from '../types/sat';
 
 interface QuestionInputProps {
-  onSubmit: (imageBase64: string, section: Section, correctAnswer?: string) => void;
+  onSubmit: (imageDataUrl: string, section: Section, correctAnswer?: string) => void;
   isLoading: boolean;
 }
 
 export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoading }) => {
-  const [imageBase64, setImageBase64] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState('');
   const [section, setSection] = useState<Section>('EBRW');
   const [hasUploadedImage, setHasUploadedImage] = useState(false);
 
   const handleSubmit = () => {
-    if (!imageBase64) return;
+    if (!imageDataUrl) return;
     
-    onSubmit(imageBase64, section);
+    onSubmit(imageDataUrl, section);
   };
 
-  const handleImageUploaded = (base64Data: string) => {
-    setImageBase64(base64Data);
+  const handleImageUploaded = (dataUrl: string) => {
+    setImageDataUrl(dataUrl);
     setHasUploadedImage(true);
   };
 
@@ -77,7 +77,7 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={isLoading || !imageBase64}
+              disabled={isLoading || !imageDataUrl}
               className="btn-primary w-full flex items-center justify-center gap-2"
             >
               {isLoading ? (

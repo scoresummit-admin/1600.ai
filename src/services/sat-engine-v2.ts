@@ -39,7 +39,7 @@ export class SATEngine {
   }
 
   async solveQuestion(
-    imageBase64: string,
+    imageDataUrl: string,
     section: Section,
     correctAnswer?: string
   ): Promise<AggregatedAnswer> {
@@ -52,7 +52,7 @@ export class SATEngine {
       const inputItem: SatItem = {
         source: 'screenshot',
         choices: [], // Will be extracted by vision models
-        imageBase64,
+        imageBase64: imageDataUrl,
         isGridIn: false // Will be determined by vision models
       };
 

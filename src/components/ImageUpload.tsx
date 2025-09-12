@@ -51,11 +51,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageUploaded, isLoa
     const reader = new FileReader();
     reader.onload = async () => {
       const base64Data = reader.result as string;
-      // Remove the data:image/jpeg;base64, prefix to get clean base64
-      const cleanBase64 = base64Data.split(',')[1];
-      
-      // Pass the base64 image data directly
-      onImageUploaded(cleanBase64);
+      // Pass the complete data URL (includes MIME type)
+      onImageUploaded(base64Data);
     };
     reader.readAsDataURL(file);
   };
