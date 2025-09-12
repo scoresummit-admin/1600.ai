@@ -39,16 +39,16 @@ export class SATRouter {
       // Handle screenshot input with dual OCR
       if (item.source === 'screenshot' && item.imageBase64) {
         imageBase64 = item.imageBase64;
-        console.log('🖼️ Processing screenshot with dual OCR...');
-        const ocrResults = await this.dualOCR(item.imageBase64);
+        console.log('🖼️ Processing screenshot with optimized OCR...');
+        
+        // Use timeout based on content complexity
+        const ocrTimeout = 35000; // Increase to 35s for math content
+        const ocrResults = await this.dualOCR(item.imageBase64, ocrTimeout);
         
         // Reconcile OCR results
         ocrText = ocrResults.gpt5.text.length > ocrResults.grok4.text.length 
           ? ocrResults.gpt5.text 
           : ocrResults.grok4.text;
-        
-        // Set fullText from OCR for backward compatibility
-        promptText = ocrText;
         
         // Use choices from the result with more choices, or combine if different
         if (ocrResults.gpt5.choices.length >= ocrResults.grok4.choices.length) {
@@ -63,7 +63,13 @@ export class SATRouter {
       }
 
       // Classify with GPT-5 (prefer image if available)
-      const classification = await this.classifyQuestion(promptText, choices, imageBase64);
+      const classificationTimeout = 15000; // 15s for classification
+      const classification = await Promise.race([
+        this.classifyQuestion(promptText, choices, imageBase64),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Classification timeout')), classificationTimeout)
+        )
+      ]);
       
       const routedItem: RoutedItem = {
         section: classification.section,
@@ -83,23 +89,29 @@ export class SATRouter {
       
     } catch (error) {
       console.error('Router error:', error);
+      // Enhanced fallback with partial OCR data
+      if (item.imageBase64) {
+        return this.fallbackRoutingWithImage(item, error);
+      }
       return this.fallbackRouting(item);
     }
   }
 
-  private async dualOCR(imageBase64: string): Promise<{
+  private async dualOCR(imageBase64: string, timeoutMs: number = 30000): Promise<{
     gpt5: { text: string; choices: string[] };
     grok4: { text: string; choices: string[] };
   }> {
-    // Use Promise.race to get the first successful OCR result, fallback to both if needed
-    const timeout = 20000; // Increase to 20s timeout per OCR call
+    console.log(`🔄 Dual OCR starting with ${timeoutMs}ms budget...`);
     
     try {
-      // Try to get the first successful result quickly
+      // Try to get the first successful result quickly (70% of timeout)
+      const raceTimeout = Math.floor(timeoutMs * 0.7);
       const firstResult = await Promise.race([
-        this.extractWithModel(imageBase64, 'openai/gpt-5', timeout),
-        this.extractWithModel(imageBase64, 'x-ai/grok-4', timeout),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('OCR race timeout')), timeout * 0.8)) // 80% of individual timeout
+        this.extractWithModel(imageBase64, 'openai/gpt-5', raceTimeout),
+        this.extractWithModel(imageBase64, 'x-ai/grok-4', raceTimeout),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('OCR race timeout')), raceTimeout)
+        )
       ]);
       
       // Got a quick result, use it for both (we'll improve this later)
@@ -110,10 +122,11 @@ export class SATRouter {
       };
     } catch (error) {
       console.log('⚠️ Fast OCR failed, falling back to parallel OCR...');
-      // Fallback to parallel execution with shorter timeouts
+      // Fallback to parallel execution with remaining timeout
+      const remainingTimeout = Math.floor(timeoutMs * 0.9);
       const [gpt5Result, grok4Result] = await Promise.allSettled([
-        this.extractWithModel(imageBase64, 'openai/gpt-5', 15000), // Increase to 15s
-        this.extractWithModel(imageBase64, 'x-ai/grok-4', 15000)   // Increase to 15s
+        this.extractWithModel(imageBase64, 'openai/gpt-5', remainingTimeout),
+        this.extractWithModel(imageBase64, 'x-ai/grok-4', remainingTimeout)
       ]);
 
       return {
@@ -123,7 +136,7 @@ export class SATRouter {
     }
   }
 
-  private async extractWithModel(imageBase64: string, model: string, timeoutMs: number = 20000): Promise<{ text: string; choices: string[] }> {
+  private async extractWithModel(imageBase64: string, model: string, timeoutMs: number = 30000): Promise<{ text: string; choices: string[] }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -134,7 +147,7 @@ export class SATRouter {
         content: [
           {
             type: 'text',
-            text: 'Extract the FULL passage, question, and answer choices from this SAT question image. Return JSON: {"passage": "full passage text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
+            text: 'Extract ALL text from this SAT question image. Include the complete passage/problem text, question, and answer choices. For math questions, be extra careful with equations, numbers, and mathematical symbols. Return JSON: {"passage": "full passage/problem text", "question": "question stem", "choices": ["A) choice text", "B) choice text", "C) choice text", "D) choice text"]}'
           },
           {
             type: 'image_url',
@@ -144,7 +157,7 @@ export class SATRouter {
           }
         ]
       }], {
-        max_tokens: 2000,
+        max_tokens: 3000, // Increase for complex math content
         temperature: 0.1,
         timeout_ms: timeoutMs, // Use the provided timeout
         // Prefer Azure for OpenAI models for better latency
@@ -164,6 +177,7 @@ export class SATRouter {
           choices: parsed.choices || []
         };
       } catch {
+        // Fallback - just return the raw text if JSON parsing fails
         return { text: response.text, choices: [] };
       }
     } catch (error) {
@@ -182,7 +196,7 @@ export class SATRouter {
     subdomain: EbrwDomain | MathDomain;
     hasFigure: boolean;
   }> {
-    const timeoutMs = 30000; // Reduce to 30s but be more reliable
+    const timeoutMs = 15000; // Fast classification
     console.log(`🔄 Classifying question (${timeoutMs}ms timeout)...`);
 
     try {
@@ -259,6 +273,43 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       .replace(/(\d)([a-zA-Z])/g, '$1 $2')
       .replace(/([a-zA-Z])(\d)/g, '$1 $2')
       .trim();
+  }
+
+  private fallbackRoutingWithImage(item: SatItem, error: any): RoutedItem {
+    console.log('🚨 Using enhanced fallback routing with image...');
+    
+    // Try to detect math vs EBRW from any available text
+    const text = (item.promptText || '').toLowerCase();
+    const choices = item.choices || [];
+    
+    // Enhanced math detection
+    const mathKeywords = ['equation', 'solve', 'graph', 'function', 'angle', 'area', 'volume', 'percent', 'ratio', 'x =', 'y =', 'f(x)', 'degrees', 'triangle'];
+    const hasMathSymbols = /[=+\-*/()²³√∫∑πθα]/.test(text) || /\b\d+\s*[+\-*/]\s*\d+\b/.test(text);
+    const isMath = mathKeywords.some(keyword => text.includes(keyword)) || hasMathSymbols;
+
+    if (isMath || choices.length === 0) {
+      return {
+        section: 'MATH',
+        subdomain: 'algebra' as MathDomain,
+        imageBase64: item.imageBase64,
+        ocrText: text || undefined,
+        fullText: text || 'Image processing failed - using image-only mode',
+        choices,
+        isGridIn: choices.length === 0,
+        hasFigure: true // Assume math questions have figures if OCR failed
+      };
+    }
+
+    return {
+      section: 'EBRW',
+      subdomain: 'information_ideas' as EbrwDomain,
+      imageBase64: item.imageBase64,
+      ocrText: text || undefined,
+      fullText: text || 'Image processing failed - using image-only mode',
+      choices,
+      isGridIn: false,
+      hasFigure: true
+    };
   }
 
   private fallbackRouting(item: SatItem): RoutedItem {

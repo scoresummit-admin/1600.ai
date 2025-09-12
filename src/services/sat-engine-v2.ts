@@ -64,10 +64,12 @@ export class SATEngine {
       };
       
       // Step 1: Route the question (increased timeout)
+      // Dynamic routing timeout based on complexity
+      const routingTimeout = 45000; // Increase to 45s for complex math questions
       const routedItem = await Promise.race([
         this.router.routeItem(item),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Router timeout')), 25000) // Increase to 25s
+          setTimeout(() => reject(new Error('Router timeout')), routingTimeout)
         )
       ]);
       
