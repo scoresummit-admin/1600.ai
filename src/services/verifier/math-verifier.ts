@@ -174,8 +174,10 @@ export class MathSolver {
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
     
-      ];
-    }
+    const messages = [
+      { role: 'system', content: SYSTEM_MATH },
+      { role: 'user', content: `Problem: ${item.question}\n\nChoices:\n${item.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}\n\nSolve this step-by-step with Python code.` }
+    ];
     
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,
@@ -184,6 +186,49 @@ export class MathSolver {
       // Prefer Azure for OpenAI models for better latency
       ...(model.startsWith('openai/') ? {
         provider: { order: ['azure', 'openai'] }
+      } : {})
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error(`${model} returned empty response`);
+    }
+
+    // Parse JSON response
+    let result: any;
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        result = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (error) {
+      console.warn(`${model} JSON parse error:`, error);
+      throw new Error(`${model} returned invalid JSON`);
+    }
+
+    let finalAnswer = result.answer || 'A';
+    let finalConfidence = Math.max(0.1, Math.min(1.0, result.confidence || 0.5));
+    
+    // Execute Python code if provided
+    let pythonResult: any = { ok: false };
+    if (result.python_code) {
+      try {
+        pythonResult = await runPython(result.python_code);
+        
+        if (pythonResult.ok && pythonResult.result !== undefined) {
+          const pythonAnswer = String(pythonResult.result).trim();
+          console.log(`🐍 ${model} Python result: ${pythonAnswer}`);
+          
+          // Check if Python result matches model answer
+          if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
+            console.log(`✅ ${model} Python result matches model answer`);
+            finalConfidence = Math.min(0.95, finalConfidence + 0.1); // +10% boost for verification
+          } else {
+            // Check if Python result matches any choice
+            const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
+            if (matchingChoice) {
               console.log(`🔄 ${model} Python result matches choice ${matchingChoice}, overriding model answer`);
               finalAnswer = matchingChoice;
               finalConfidence = Math.min(0.95, finalConfidence + 0.15); // +15% boost but override answer
