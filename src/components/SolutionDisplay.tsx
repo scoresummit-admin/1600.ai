@@ -9,12 +9,6 @@ interface SolutionDisplayProps {
 export const SolutionDisplay: React.FC<SolutionDisplayProps> = ({ solution }) => {
   if (!solution) return null;
 
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.9) return 'text-success-600';
-    if (confidence >= 0.7) return 'text-warning-600';
-    return 'text-error-600';
-  };
-
   const getConfidenceBadge = (confidence: number) => {
     if (confidence >= 0.9) return 'badge-success';
     if (confidence >= 0.7) return 'badge-warning';

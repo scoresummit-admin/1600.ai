@@ -98,8 +98,7 @@ export class MathSolver {
 
   private async runConcurrentModels(item: RoutedItem, timeoutMs: number): Promise<SolverResult[]> {
     // Wait for all models to complete, don't use Promise.allSettled which might timeout early
-    const results: SolverResult[] = [];
-    const promises = MATH_MODELS.map(async (model, index) => {
+    const promises = MATH_MODELS.map(async (model) => {
       try {
         const result = await this.solveWithModelSafe(item, model, timeoutMs);
         console.log(`✅ Math ${model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
