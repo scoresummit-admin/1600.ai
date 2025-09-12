@@ -14,12 +14,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          ocr: ['tesseract.js']
-              }
-          },
-      },
-  }
+          vendor: ['react', 'react-dom']
+        }
+      }
+    }
+  },
   server: {
     port: 3000,
     host: true
