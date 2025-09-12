@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Send, Image } from 'lucide-react';
 import { ImageUpload } from './ImageUpload';
+import { Section } from '../types/sat';
 
 interface QuestionInputProps {
-  onSubmit: (imageBase64: string, ocrText: string, choices: string[], correctAnswer?: string) => void;
+  onSubmit: (imageBase64: string, ocrText: string, choices: string[], section: Section, correctAnswer?: string) => void;
   isLoading: boolean;
 }
 
@@ -12,6 +13,7 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
   const [ocrText, setOcrText] = useState('');
   const [choices, setChoices] = useState(['', '', '', '']);
   const [questionType, setQuestionType] = useState<'multiple-choice' | 'grid-in'>('multiple-choice');
+  const [section, setSection] = useState<Section>('EBRW');
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [hasProcessedImage, setHasProcessedImage] = useState(false);
 
@@ -22,7 +24,7 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
       ? choices.filter(choice => choice.trim()) 
       : [];
     
-    onSubmit(imageBase64, ocrText, validChoices);
+    onSubmit(imageBase64, ocrText, validChoices, section);
   };
 
   const handleImageProcessed = (base64Data: string, questionText: string, extractedChoices: string[]) => {
@@ -94,6 +96,27 @@ export const QuestionInput: React.FC<QuestionInputProps> = ({ onSubmit, isLoadin
               ))}
             </div>
           )}
+
+          <div className="flex gap-4 pt-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                className="text-primary-600"
+                checked={section === 'EBRW'}
+                onChange={() => setSection('EBRW')}
+              />
+              EBRW
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                className="text-primary-600"
+                checked={section === 'MATH'}
+                onChange={() => setSection('MATH')}
+              />
+              Math
+            </label>
+          </div>
 
           <div className="pt-4 border-t border-slate-200">
             <button

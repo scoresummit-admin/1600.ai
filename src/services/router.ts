@@ -19,16 +19,16 @@ If the prompt is text-only (including OCR), set has_figure to false.`;
 export class SATRouter {
   constructor() {}
 
-  async routeItem(inputItem: SatItem): Promise<RoutedItem> {
+  async routeItem(inputItem: SatItem, providedSection?: Section): Promise<RoutedItem> {
     console.log('📍 SATRouter starting classification...');
-    
+
     const text = inputItem.promptText || '';
     const isGridIn = inputItem.isGridIn || inputItem.choices.length === 0;
-    
-    // Simple heuristic-based routing
-    const section = this.classifySection(text, inputItem.choices);
+
+    // Use provided section if available, otherwise fall back to heuristic
+    const section = providedSection || this.classifySection(text, inputItem.choices);
     const subdomain = this.classifySubdomain(text, section, isGridIn);
-    
+
     const routedItem: RoutedItem = {
       section,
       subdomain,
@@ -40,7 +40,7 @@ export class SATRouter {
       isGridIn,
       hasFigure: !!inputItem.imageBase64
     };
-    
+
     console.log(`📍 Classified as: ${section}/${subdomain}${isGridIn ? ' (grid-in)' : ''}`);
     return routedItem;
   }

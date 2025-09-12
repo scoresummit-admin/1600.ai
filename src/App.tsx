@@ -3,7 +3,7 @@ import { Brain, Zap, Target } from 'lucide-react';
 import { QuestionInput } from './components/QuestionInput';
 import { SolutionDisplay } from './components/SolutionDisplay';
 import { SATEngine } from './services/sat-engine-v2';
-import { AggregatedAnswer } from './types/sat';
+import { AggregatedAnswer, Section } from './types/sat';
 
 const satEngine = new SATEngine();
 
@@ -12,16 +12,17 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleQuestionSubmit = async (
-    imageBase64: string, 
-    ocrText: string, 
-    choices: string[], 
+    imageBase64: string,
+    ocrText: string,
+    choices: string[],
+    section: Section,
     correctAnswer?: string
   ) => {
     setIsLoading(true);
     setSolution(null);
 
     try {
-      const result = await satEngine.solveQuestion(imageBase64, ocrText, choices, correctAnswer);
+      const result = await satEngine.solveQuestion(imageBase64, ocrText, choices, section, correctAnswer);
       setSolution(result);
     } catch (error) {
       console.error('Error solving question:', error);
