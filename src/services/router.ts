@@ -276,7 +276,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
   }
 
   private fallbackRoutingWithImage(item: SatItem, error: any): RoutedItem {
-    console.log('🚨 Using enhanced fallback routing with image...');
+    console.log('🚨 Using enhanced fallback routing with image...', error);
     
     // Try to detect math vs EBRW from any available text
     const text = (item.promptText || '').toLowerCase();
