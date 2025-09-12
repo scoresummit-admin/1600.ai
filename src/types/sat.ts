@@ -15,11 +15,10 @@ export type MathDomain =
   | 'geometry_trigonometry';
 
 export type ModelName = 
+  | 'anthropic/claude-opus-4.1'
   | 'openai/gpt-5'
-  | 'openai/o3'
   | 'x-ai/grok-4'
-  | 'qwen/qwen3-235b-a22b-thinking-2507'
-  | 'anthropic/claude-sonnet-4';
+  | 'anthropic/claude-4.1-sonnet';
 
 export interface SatItem {
   source: string;

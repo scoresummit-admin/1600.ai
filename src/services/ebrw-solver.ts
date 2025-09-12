@@ -61,10 +61,9 @@ Output the JSON only.`;
 
 // EBRW concurrent quartet models
 const EBRW_MODELS = [
-  'openai/o3',
+  'anthropic/claude-opus-4.1',
   'openai/gpt-5',
-  'x-ai/grok-4',
-  'anthropic/claude-sonnet-4'
+  'x-ai/grok-4'
 ];
 
 export class EBRWSolver {
@@ -181,25 +180,47 @@ export class EBRWSolver {
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     console.log(`🔄 EBRW solving with ${model} (${timeoutMs}ms timeout)...`);
     
-    const userPrompt = `Problem: ${item.question}
+    // Create vision message with image and question
+    const messages = [];
+
+    if (item.imageBase64) {
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `${SYSTEM_EBRW}
+
+Please solve this SAT EBRW question. Extract the question text and answer choices from the image, then provide your solution.
+
+Domain: ${item.subdomain}
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${item.imageBase64}`
+            }
+          }
+        ]
+      });
+    } else {
+      // Fallback if no image (shouldn't happen with new architecture)
+      messages.push({
+        role: 'user',
+        content: `${SYSTEM_EBRW}
+
+Problem: ${item.question}
 
 Choices:
 ${item.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}
 
 Domain: ${item.subdomain}
 
-Solve this systematically with evidence extraction.`;
-    
-    const messages = [
-      { 
-        role: 'user', 
-        content: `${SYSTEM_EBRW}
-
-${userPrompt}
-
-CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` 
-      }
-    ];
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
+      });
+    }
     
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,

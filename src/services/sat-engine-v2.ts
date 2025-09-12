@@ -41,8 +41,6 @@ export class SATEngine {
 
   async solveQuestion(
     imageBase64: string,
-    ocrText: string,
-    choices: string[],
     section: Section,
     correctAnswer?: string
   ): Promise<AggregatedAnswer> {
@@ -54,10 +52,9 @@ export class SATEngine {
       // 1. Create input item
       const inputItem: SatItem = {
         source: 'screenshot',
-        promptText: ocrText,
-        choices,
+        choices: [], // Will be extracted by vision models
         imageBase64,
-        isGridIn: choices.length === 0
+        isGridIn: false // Will be determined by vision models
       };
 
       // 2. Route the item (Router phase)

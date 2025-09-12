@@ -22,27 +22,32 @@ export class SATRouter {
   async routeItem(inputItem: SatItem, providedSection?: Section): Promise<RoutedItem> {
     console.log('📍 SATRouter starting classification...');
 
-    const text = inputItem.promptText || '';
-    const isGridIn = inputItem.isGridIn || inputItem.choices.length === 0;
-
-    // Use provided section if available, otherwise fall back to heuristic
-    const section = providedSection || this.classifySection(text, inputItem.choices);
-    const subdomain = this.classifySubdomain(text, section, isGridIn);
+    // With vision models, we don't have text upfront - use provided section
+    const section = providedSection || 'EBRW'; // Default to EBRW if not provided
+    const subdomain = this.getDefaultSubdomain(section);
 
     const routedItem: RoutedItem = {
       section,
       subdomain,
       imageBase64: inputItem.imageBase64,
-      ocrText: inputItem.promptText || '',
-      fullText: inputItem.promptText || '',
-      question: inputItem.promptText || '',
-      choices: inputItem.choices || [],
-      isGridIn,
+      ocrText: '', // No OCR anymore
+      fullText: '', // Will be extracted by vision models
+      question: '', // Will be extracted by vision models
+      choices: [], // Will be extracted by vision models
+      isGridIn: false, // Will be determined by vision models
       hasFigure: !!inputItem.imageBase64
     };
 
-    console.log(`📍 Classified as: ${section}/${subdomain}${isGridIn ? ' (grid-in)' : ''}`);
+    console.log(`📍 Routed as: ${section}/${subdomain}`);
     return routedItem;
+  }
+
+  private getDefaultSubdomain(section: Section): EbrwDomain | MathDomain {
+    if (section === 'MATH') {
+      return 'algebra'; // Default math subdomain
+    } else {
+      return 'information_ideas'; // Default EBRW subdomain
+    }
   }
 
   private classifySection(text: string, _choices: string[]): Section {

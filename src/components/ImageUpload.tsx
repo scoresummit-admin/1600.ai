@@ -2,12 +2,11 @@ import React, { useState, useRef } from 'react';
 import { Upload, Camera, FileImage, Loader2, X } from 'lucide-react';
 
 interface ImageUploadProps {
-  onImageProcessed: (base64Data: string, questionText: string, choices: string[]) => void;
-  onStartProcessing: () => void;
-  isProcessing: boolean;
+  onImageUploaded: (base64Data: string) => void;
+  isLoading: boolean;
 }
 
-export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, onStartProcessing, isProcessing }) => {
+export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageUploaded, isLoading }) => {
   const [dragActive, setDragActive] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -55,22 +54,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, onSt
       // Remove the data:image/jpeg;base64, prefix to get clean base64
       const cleanBase64 = base64Data.split(',')[1];
       
-      // Notify parent that processing is starting
-      onStartProcessing();
-
-      // Process with OCR for text extraction
-      try {
-        const { OCRService } = await import('../services/ocr-service');
-        const ocrService = OCRService.getInstance();
-        
-        const result = await ocrService.extractSATQuestion(file);
-        
-        // Pass both the base64 image data AND the OCR text
-        onImageProcessed(cleanBase64, result.questionText, result.choices);
-      } catch (error) {
-        console.error('OCR processing failed:', error);
-        alert('Failed to process image. Please try again or enter the question manually.');
-      }
+      // Pass the base64 image data directly
+      onImageUploaded(cleanBase64);
     };
     reader.readAsDataURL(file);
   };
@@ -94,7 +79,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, onSt
           <button
             onClick={clearImage}
             className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md hover:bg-slate-50"
-            disabled={isProcessing}
+            disabled={isLoading}
           >
             <X className="w-4 h-4" />
           </button>
@@ -106,7 +91,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, onSt
           dragActive 
             ? 'border-primary-400 bg-primary-50' 
             : 'border-slate-300 hover:border-slate-400'
-        } ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}
+        } ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -118,46 +103,36 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageProcessed, onSt
           accept="image/*"
           onChange={handleFileInput}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          disabled={isProcessing}
+          disabled={isLoading}
         />
         
         <div className="space-y-3">
-          {isProcessing ? (
-            <>
-              <Loader2 className="w-12 h-12 mx-auto text-primary-600 animate-spin" />
-              <p className="text-slate-600">Processing image with OCR...</p>
-              <p className="text-sm text-slate-500">This may take a few seconds</p>
-            </>
-          ) : (
-            <>
-              <div className="flex justify-center space-x-2">
-                <Upload className="w-8 h-8 text-slate-400" />
-                <Camera className="w-8 h-8 text-slate-400" />
-                <FileImage className="w-8 h-8 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-slate-600 font-medium">
-                  Upload SAT Question Screenshot
-                </p>
-                <p className="text-sm text-slate-500 mt-1">
-                  Drag and drop or click to select an image
-                </p>
-              </div>
-              <div className="text-xs text-slate-400">
-                Supports: JPG, PNG, WebP • Max 10MB
-              </div>
-            </>
-          )}
+          <div className="flex justify-center space-x-2">
+            <Upload className="w-8 h-8 text-slate-400" />
+            <Camera className="w-8 h-8 text-slate-400" />
+            <FileImage className="w-8 h-8 text-slate-400" />
+          </div>
+          <div>
+            <p className="text-slate-600 font-medium">
+              Upload SAT Question Screenshot
+            </p>
+            <p className="text-sm text-slate-500 mt-1">
+              Drag and drop or click to select an image
+            </p>
+          </div>
+          <div className="text-xs text-slate-400">
+            Supports: JPG, PNG, WebP • Max 10MB
+          </div>
         </div>
       </div>
 
-      <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
-        <strong>Tips for best OCR results:</strong>
+      <div className="text-xs text-slate-500 bg-primary-50 p-3 rounded-lg">
+        <strong>Vision AI will read your image directly:</strong>
         <ul className="mt-1 space-y-1 list-disc list-inside">
           <li>Use high-resolution, clear images</li>
           <li>Ensure good lighting and contrast</li>
           <li>Crop to show only the question area</li>
-          <li>Avoid shadows or glare on the text</li>
+          <li>Include all answer choices and diagrams</li>
         </ul>
       </div>
     </div>

@@ -3,11 +3,10 @@ import { ModelConfig, ModelName } from '../types/sat';
 // Default configuration for models
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   enabled_models: [
-    'openai/gpt-5',
-    'openai/o3', 
+    'anthropic/claude-opus-4.1',
+    'openai/gpt-5', 
     'x-ai/grok-4',
-    'qwen/qwen3-235b-a22b-thinking-2507',
-    'anthropic/claude-sonnet-4'
+    'anthropic/claude-4.1-sonnet'
   ],
   reasoning_effort: 'medium',
   max_tokens: 3000,
@@ -22,26 +21,20 @@ export const MODEL_CAPABILITIES = {
     context_length: 128000,
     cost_tier: 'high'
   },
-  'openai/o3': {
-    strengths: ['complex_reasoning', 'math', 'analysis'],
-    supports_images: true,
-    context_length: 200000,
-    cost_tier: 'highest'
-  },
   'x-ai/grok-4': {
-    strengths: ['reasoning', 'analysis', 'math'],
+    strengths: ['reasoning', 'analysis', 'math', 'vision'],
     supports_images: true,
     context_length: 131072,
     cost_tier: 'high'
   },
-  'qwen/qwen3-235b-a22b-thinking-2507': {
-    strengths: ['math', 'reasoning', 'competition_problems'],
+  'anthropic/claude-opus-4.1': {
+    strengths: ['reading', 'analysis', 'evidence_extraction', 'vision'],
     supports_images: true,
-    context_length: 32768,
-    cost_tier: 'medium'
+    context_length: 200000,
+    cost_tier: 'high'
   },
-  'anthropic/claude-sonnet-4': {
-    strengths: ['reading', 'analysis', 'evidence_extraction'],
+  'anthropic/claude-4.1-sonnet': {
+    strengths: ['reading', 'analysis', 'math', 'vision'],
     supports_images: true,
     context_length: 200000,
     cost_tier: 'high'
@@ -51,15 +44,15 @@ export const MODEL_CAPABILITIES = {
 export function getModelForTask(task: 'math' | 'ebrw', priority: 'speed' | 'accuracy' = 'accuracy'): ModelName[] {
   if (task === 'math') {
     if (priority === 'speed') {
-      return ['openai/gpt-5', 'x-ai/grok-4', 'qwen/qwen3-235b-a22b-thinking-2507'];
+      return ['openai/gpt-5', 'x-ai/grok-4', 'anthropic/claude-4.1-sonnet'];
     } else {
-      return ['openai/o3', 'openai/gpt-5', 'qwen/qwen3-235b-a22b-thinking-2507'];
+      return ['openai/gpt-5', 'x-ai/grok-4', 'anthropic/claude-4.1-sonnet'];
     }
   } else { // EBRW
     if (priority === 'speed') {
-      return ['openai/gpt-5', 'anthropic/claude-sonnet-4'];
+      return ['openai/gpt-5', 'x-ai/grok-4'];
     } else {
-      return ['openai/o3', 'anthropic/claude-sonnet-4', 'openai/gpt-5'];
+      return ['anthropic/claude-opus-4.1', 'openai/gpt-5', 'x-ai/grok-4'];
     }
   }
 }

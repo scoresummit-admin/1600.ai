@@ -61,7 +61,7 @@ Final step: Output the JSON only.`;
 const MATH_MODELS = [
   'openai/gpt-5',
   'x-ai/grok-4',
-  'qwen/qwen3-235b-a22b-thinking-2507'
+  'anthropic/claude-4.1-sonnet'
 ];
 
 export class MathSolver {
@@ -127,43 +127,55 @@ export class MathSolver {
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
     
-    let messages;
-    
-    if (item.choices.length > 0) {
-      const userPrompt = `Problem: ${item.question}
+    // Create vision message with image
+    const messages = [];
 
-Choices:
-${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}
+    if (item.imageBase64) {
+      const isGridIn = item.choices.length === 0;
+      const questionTypeInstruction = isGridIn 
+        ? "This is a grid-in question - provide the numeric answer."
+        : "This is a multiple choice question - choose A, B, C, or D.";
 
-MUST include working Python code that sets 'result' variable.`;
-      
-      messages = [
-        { 
-          role: 'user', 
-          content: `${SYSTEM_MATH}
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `${SYSTEM_MATH}
 
-${userPrompt}
+Please solve this SAT Math question. Extract the problem from the image and solve it.
 
-CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` 
-        }
-      ];
+${questionTypeInstruction}
+
+MUST include working Python code that sets 'result' variable.
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${item.imageBase64}`
+            }
+          }
+        ]
+      });
     } else {
-      const userPrompt = `Problem: ${item.question}
+      // Fallback if no image (shouldn't happen with new architecture)
+      const isGridIn = item.choices.length === 0;
+      const userPrompt = isGridIn 
+        ? `Problem: ${item.question}\n\nThis is a grid-in question - provide the numeric answer.`
+        : `Problem: ${item.question}\n\nChoices:\n${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}`;
 
-This is a grid-in question - provide the numeric answer.
-
-MUST include working Python code that sets 'result' variable.`;
-      
-      messages = [
-        { 
-          role: 'user', 
-          content: `${SYSTEM_MATH}
+      messages.push({
+        role: 'user',
+        content: `${SYSTEM_MATH}
 
 ${userPrompt}
 
-CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` 
-        }
-      ];
+MUST include working Python code that sets 'result' variable.
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
+      });
     }
     
     const response = await openrouterClient(model, messages, {
@@ -193,9 +205,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     };
     
     // Execute Python code if provided
-    if (result.python_code) {
+    if (result.python) {
       try {
-        const pythonExecResult = await runPython(result.python_code);
+        const pythonExecResult = await runPython(result.python);
         pythonResult = pythonExecResult;
         
         if (pythonExecResult.ok) {
@@ -237,7 +249,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       meta: {
         method: result.method,
         explanation: result.explanation,
-        python: result.python_code,
+        python: result.python,
         pythonResult: pythonResult,
         checks: ['python_execution', 'symbolic_verification']
       },

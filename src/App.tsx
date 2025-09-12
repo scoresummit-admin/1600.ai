@@ -13,8 +13,6 @@ function App() {
 
   const handleQuestionSubmit = async (
     imageBase64: string,
-    ocrText: string,
-    choices: string[],
     section: Section,
     correctAnswer?: string
   ) => {
@@ -22,7 +20,7 @@ function App() {
     setSolution(null);
 
     try {
-      const result = await satEngine.solveQuestion(imageBase64, ocrText, choices, section, correctAnswer);
+      const result = await satEngine.solveQuestion(imageBase64, section, correctAnswer);
       setSolution(result);
     } catch (error) {
       console.error('Error solving question:', error);
