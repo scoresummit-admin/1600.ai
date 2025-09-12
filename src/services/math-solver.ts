@@ -220,42 +220,6 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       // Prefer Azure for OpenAI models for better latency
       ...(model.startsWith('openai/') ? {
         provider: { order: ['azure', 'openai'] }
-      } : {})
-    });
-
-    let content = response.text;
-    
-    // Handle JSON markdown wrapper
-    if (content.startsWith('```json')) {
-      content = content.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (content.startsWith('```')) {
-      content = content.replace(/```\n?/, '').replace(/\n?```$/, '');
-    }
-    
-    const result = JSON.parse(content);
-    
-    // Execute Python code if provided
-    let pythonResult = null;
-    let finalAnswer = result.answer;
-    let finalConfidence = result.confidence;
-    
-    if (result.python_code) {
-      console.log(`🐍 Executing Python verification code for ${model}...`);
-      try {
-        pythonResult = await runPython(result.python_code);
-        
-        if (pythonResult.ok) {
-          const pythonAnswer = String(pythonResult.result);
-          console.log(`🐍 ${model} Python result: ${pythonAnswer}, Model answer: ${finalAnswer}`);
-          
-          // Smart comparison between Python result and model answer
-          if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
-            console.log(`✅ ${model} Python verification confirms model answer`);
-            finalConfidence = Math.min(0.98, finalConfidence + 0.20); // +20% boost for Python confirmation
-          } else {
-            // Check if Python result matches any of the choices
-            const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
-            if (matchingChoice) {
               console.log(`🔄 ${model} Python result matches choice ${matchingChoice}, overriding model answer`);
               finalAnswer = matchingChoice;
               finalConfidence = Math.min(0.95, finalConfidence + 0.15); // +15% boost but override answer
