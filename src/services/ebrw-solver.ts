@@ -256,7 +256,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,
-      max_tokens: 3000,
+      max_tokens: 5000,
       timeout_ms: timeoutMs
     });
     
