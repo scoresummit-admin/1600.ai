@@ -71,7 +71,7 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 60000; // 60s total timeout - more time for Grok
+    const timeoutMs = 80000; // 80s total timeout - more time for Grok
     console.log(`🔄 EBRW solver starting concurrent trio (${timeoutMs}ms timeout)...`);
     
     try {
