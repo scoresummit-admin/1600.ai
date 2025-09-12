@@ -98,7 +98,6 @@ export class MathSolver {
 
   private async runConcurrentModels(item: RoutedItem, timeoutMs: number): Promise<SolverResult[]> {
     const fastModels = ['openai/gpt-5', 'anthropic/claude-4.1-sonnet']; // ~5s latency
-    const slowModels = ['x-ai/grok-4']; // ~35s latency
     
     const promises = MATH_MODELS.map(async (model) => {
       try {

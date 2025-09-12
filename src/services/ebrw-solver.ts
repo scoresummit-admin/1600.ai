@@ -101,7 +101,6 @@ export class EBRWSolver {
 
   private async raceForResults(item: RoutedItem, individualTimeout: number, totalTimeout: number): Promise<SolverResult[]> {
     const fastModels = ['anthropic/claude-opus-4.1', 'openai/gpt-5']; // ~5s latency
-    const slowModels = ['x-ai/grok-4']; // ~35s latency
     
     const allResults: SolverResult[] = [];
     const promises = EBRW_MODELS.map((model, index) => 
