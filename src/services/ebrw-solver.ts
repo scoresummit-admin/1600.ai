@@ -76,7 +76,7 @@ export class EBRWSolver {
     
     try {
       // Dispatch all four models concurrently
-      const individualTimeout = Math.min(timeoutMs * 0.9, 50000); // 90% of total timeout, max 50s
+      const individualTimeout = Math.min(timeoutMs * 0.9, 70000); // 90% of total timeout, max 70s
       
       const results = await this.raceForResults(item, individualTimeout, timeoutMs);
       
