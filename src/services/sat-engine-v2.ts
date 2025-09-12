@@ -4,7 +4,7 @@ import { MathSolver } from './math-solver';
 import { EBRWVerifier } from './verifier/ebrw-verifier';
 import { MathVerifier } from './verifier/math-verifier';
 import { SATAggregator } from './core/aggregate';
-import { SatItem, AggregatedAnswer, PerformanceMetrics } from '../../types/sat';
+import { SatItem, AggregatedAnswer, PerformanceMetrics, RoutedItem } from '../../types/sat';
 
 export class SATEngine {
   private router: SATRouter;
@@ -179,46 +179,6 @@ export class SATEngine {
     }
   }
   
-  private async handleSolverError(error: Error, routedItem: RoutedItem, section: 'EBRW' | 'MATH'): Promise<{
-    solverResult: any;
-    verifierReport: any;
-  }> {
-    console.error(`❌ ${section} solver failed:`, error);
-    
-    // Create fallback solution
-    const solverResult = section === 'EBRW' ? {
-      final: 'A',
-      confidence: 0.15,
-      meta: {
-        domain: 'information_ideas',
-        explanation: 'Solver timeout or error occurred',
-        evidence: ['Fallback due to system error'],
-        elimination_notes: { 'Error': 'Pipeline timeout' }
-      },
-      model: 'fallback'
-    } : {
-      final: routedItem.choices.length > 0 ? 'A' : '0',
-      confidence: 0.15,
-      meta: {
-        method: 'fallback',
-        explanation: 'Solver timeout or error occurred',
-        python: `# Fallback solution\nresult = "${routedItem.choices.length > 0 ? 'A' : '0'}"`,
-        pythonResult: { ok: false, error: 'Solver timeout' },
-        checks: ['fallback']
-      },
-      model: 'fallback'
-    };
-    
-    const verifierReport = {
-      passed: false,
-      score: 0.3,
-      notes: ['Solver failed - using fallback'],
-      checks: ['error']
-    };
-    
-    return { solverResult, verifierReport };
-  }
-
   private updateMetrics(answer: AggregatedAnswer, correctAnswer?: string) {
     this.metrics.total_questions++;
     
