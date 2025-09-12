@@ -100,7 +100,10 @@ export class EBRWSolver {
   }
 
   private async raceForResults(item: RoutedItem, individualTimeout: number, totalTimeout: number): Promise<SolverResult[]> {
-    const results: SolverResult[] = [];
+    const fastModels = ['anthropic/claude-opus-4.1', 'openai/gpt-5']; // ~5s latency
+    const slowModels = ['x-ai/grok-4']; // ~35s latency
+    
+    const allResults: SolverResult[] = [];
     const promises = EBRW_MODELS.map((model, index) => 
       this.solveWithModelSafe(item, model, individualTimeout).then(result => ({
         result,
@@ -110,50 +113,79 @@ export class EBRWSolver {
     );
     
     return new Promise((resolve, reject) => {
-      let completed = 0;
+      let fastCompleted = 0;
+      let totalCompleted = 0;
       let hasResolved = false;
       
       const timeoutId = setTimeout(() => {
         if (!hasResolved) {
           hasResolved = true;
-          if (results.length > 0) {
-            console.log(`⏱️ EBRW timeout after ${totalTimeout}ms with ${results.length} results, proceeding...`);
-            resolve(results);
+          if (allResults.length > 0) {
+            console.log(`⏱️ EBRW timeout after ${totalTimeout}ms with ${allResults.length} results, proceeding...`);
+            resolve(allResults);
           } else {
             reject(new Error('EBRW total timeout with no results'));
           }
         }
       }, totalTimeout);
       
+      const checkEarlyConsensus = () => {
+        if (hasResolved) return;
+        
+        const fastResults = allResults.filter(r => fastModels.includes(r.model));
+        
+        // If we have both fast models and they agree, return immediately
+        if (fastResults.length === 2) {
+          const [result1, result2] = fastResults;
+          if (result1.final === result2.final) {
+            hasResolved = true;
+            clearTimeout(timeoutId);
+            console.log(`🚀 EBRW early consensus: ${result1.final} (both fast models agree, skipping Grok)`);
+            resolve(fastResults);
+            return;
+          } else {
+            console.log(`🔄 EBRW fast models disagree: ${result1.final} vs ${result2.final}, waiting for Grok...`);
+          }
+        }
+      };
+      
       promises.forEach(promise => {
         promise.then(({ result }) => {
           if (!hasResolved && result.confidence > 0.1) {
-            results.push(result);
+            allResults.push(result);
             console.log(`✅ EBRW ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
             
-            // Wait for all models to complete or significant time has passed
-            completed++;
-            if (completed >= EBRW_MODELS.length) {
+            // Track completion
+            if (fastModels.includes(result.model)) {
+              fastCompleted++;
+            }
+            totalCompleted++;
+            
+            // Check for early consensus after each fast model completes
+            checkEarlyConsensus();
+            
+            // All models completed
+            if (totalCompleted >= EBRW_MODELS.length) {
               hasResolved = true;
               clearTimeout(timeoutId);
-              console.log(`🚀 EBRW all models completed with ${results.length} results`);
-              resolve(results);
+              console.log(`🚀 EBRW all models completed with ${allResults.length} results`);
+              resolve(allResults);
             }
           } else {
-            completed++;
-            if (completed >= EBRW_MODELS.length && !hasResolved) {
+            totalCompleted++;
+            if (totalCompleted >= EBRW_MODELS.length && !hasResolved) {
               hasResolved = true;
               clearTimeout(timeoutId);
-              resolve(results);
+              resolve(allResults);
             }
           }
         }).catch(error => {
           console.warn(`🔄 EBRW model failed:`, error);
-          completed++;
-          if (completed >= EBRW_MODELS.length && !hasResolved) {
+          totalCompleted++;
+          if (totalCompleted >= EBRW_MODELS.length && !hasResolved) {
             hasResolved = true;
             clearTimeout(timeoutId);
-            resolve(results);
+            resolve(allResults);
           }
         });
       });

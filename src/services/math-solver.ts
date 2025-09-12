@@ -97,7 +97,9 @@ export class MathSolver {
   }
 
   private async runConcurrentModels(item: RoutedItem, timeoutMs: number): Promise<SolverResult[]> {
-    // Wait for all models to complete, don't use Promise.allSettled which might timeout early
+    const fastModels = ['openai/gpt-5', 'anthropic/claude-4.1-sonnet']; // ~5s latency
+    const slowModels = ['x-ai/grok-4']; // ~35s latency
+    
     const promises = MATH_MODELS.map(async (model) => {
       try {
         const result = await this.solveWithModelSafe(item, model, timeoutMs);
@@ -109,11 +111,62 @@ export class MathSolver {
       }
     });
     
-    const settled = await Promise.allSettled(promises);
-    return settled
-      .filter((r): r is PromiseFulfilledResult<SolverResult> => r.status === 'fulfilled')
-      .map(r => r.value)
-      .filter(r => r !== null);
+    return new Promise((resolve) => {
+      const allResults: SolverResult[] = [];
+      let fastCompleted = 0;
+      let totalCompleted = 0;
+      let hasResolved = false;
+      
+      const checkEarlyConsensus = () => {
+        if (hasResolved) return;
+        
+        const fastResults = allResults.filter(r => fastModels.includes(r.model));
+        
+        // If we have both fast models and they agree, return immediately
+        if (fastResults.length === 2) {
+          const [result1, result2] = fastResults;
+          if (result1.final === result2.final) {
+            hasResolved = true;
+            console.log(`🚀 Math early consensus: ${result1.final} (both fast models agree, skipping Grok)`);
+            resolve(fastResults);
+            return;
+          } else {
+            console.log(`🔄 Math fast models disagree: ${result1.final} vs ${result2.final}, waiting for Grok...`);
+          }
+        }
+      };
+      
+      promises.forEach(promise => {
+        promise.then(result => {
+          if (result && !hasResolved) {
+            allResults.push(result);
+            console.log(`✅ Math ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
+            
+            // Track completion
+            if (fastModels.includes(result.model)) {
+              fastCompleted++;
+            }
+            totalCompleted++;
+            
+            // Check for early consensus after each fast model completes
+            checkEarlyConsensus();
+            
+            // All models completed
+            if (totalCompleted >= MATH_MODELS.length) {
+              hasResolved = true;
+              console.log(`🚀 Math all models completed with ${allResults.length} results`);
+              resolve(allResults);
+            }
+          } else {
+            totalCompleted++;
+            if (totalCompleted >= MATH_MODELS.length && !hasResolved) {
+              hasResolved = true;
+              resolve(allResults);
+            }
+          }
+        });
+      });
+    });
   }
 
   private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
