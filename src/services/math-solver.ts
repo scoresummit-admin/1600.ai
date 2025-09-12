@@ -225,7 +225,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     
     let result;
     try {
-      const cleanedResponse = response.replace(/```json\s*|\s*```/g, '').trim();
+      const cleanedResponse = response.text.replace(/```json\s*|\s*```/g, '').trim();
       result = JSON.parse(cleanedResponse);
     } catch (error) {
       console.error(`${model} JSON parse error:`, error);

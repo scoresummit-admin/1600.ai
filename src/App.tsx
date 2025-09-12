@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Brain, Zap, Target } from 'lucide-react';
 import { QuestionInput } from './components/QuestionInput';
 import { SolutionDisplay } from './components/SolutionDisplay';
