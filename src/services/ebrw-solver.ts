@@ -263,7 +263,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     let result;
     try {
       // More aggressive cleaning for Grok's response format
-      let cleanedResponse = response.text
+      const cleanedResponse = response.text
         .replace(/```json\s*/g, '')
         .replace(/\s*```/g, '')
         .replace(/^[^{]*/, '') // Remove any text before the first {
@@ -274,16 +274,19 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       if (!cleanedResponse.startsWith('{')) {
         const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          cleanedResponse = jsonMatch[0];
+          const extractedJson = jsonMatch[0];
+          result = JSON.parse(extractedJson);
+        } else {
+          throw new Error('No valid JSON object found in response');
         }
+      } else {
+        result = JSON.parse(cleanedResponse);
       }
-      
-      result = JSON.parse(cleanedResponse);
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`${model} JSON parse error:`, error);
       console.error(`${model} raw response:`, response.text.substring(0, 1000) + '...');
-      console.error(`${model} cleaned response:`, cleanedResponse.substring(0, 500) + '...');
-      throw new Error(`Invalid JSON response from ${model}: ${error.message}`);
+      throw new Error(`Invalid JSON response from ${model}: ${errorMessage}`);
     }
     
     const finalAnswer = result.answer || 'A';
