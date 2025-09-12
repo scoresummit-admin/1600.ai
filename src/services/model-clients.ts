@@ -21,7 +21,10 @@ export async function openrouterClient(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), options.timeout_ms || 75000);
+  const timeoutMs = options.timeout_ms || 75000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  console.log(`🔄 OpenRouter ${model} request (${timeoutMs}ms timeout)...`);
 
   try {
     const requestBody: any = {
@@ -54,18 +57,23 @@ export async function openrouterClient(
     });
 
     clearTimeout(timeoutId);
+    
+    console.log(`✅ OpenRouter ${model} response received (${response.status})`);
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`❌ OpenRouter ${model} error: ${response.status} ${response.statusText} - ${errorText}`);
       throw new Error(`OpenRouter proxy error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
     const text = data.choices[0]?.message?.content?.trim() || '';
     
+    console.log(`🎯 OpenRouter ${model} completed successfully (${text.length} chars)`);
     return { raw: data, text };
   } catch (error) {
     clearTimeout(timeoutId);
+    console.error(`❌ OpenRouter ${model} request failed:`, error);
     throw error;
   }
 }

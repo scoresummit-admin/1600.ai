@@ -38,7 +38,28 @@ function App() {
       setP95Timer(latency);
     } catch (error) {
       console.error('Error solving question:', error);
-      alert(`Error solving question: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Create fallback solution for UI display
+      const fallbackAnswer: AggregatedAnswer = {
+        answer: 'A',
+        confidence: 0.2,
+        section: 'EBRW',
+        subdomain: 'information_ideas',
+        timeMs: Date.now() - startTime,
+        modelVotes: [],
+        verifier: { passed: false, score: 0.1, notes: [`System error: ${error instanceof Error ? error.message : 'Unknown error'}`] },
+        shortExplanation: 'System encountered an error during processing',
+        evidenceOrChecks: ['Error in pipeline - check console for details']
+      };
+      
+      setSolution(fallbackAnswer);
+      setMetrics(satEngine.getMetrics());
+      
+      const latency = Date.now() - startTime;
+      setP95Timer(latency);
+      
+      // Show error but don't block UI
+      console.error('Full error details:', error);
     } finally {
       setIsLoading(false);
     }

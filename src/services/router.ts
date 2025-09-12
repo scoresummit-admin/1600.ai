@@ -92,14 +92,14 @@ export class SATRouter {
     grok4: { text: string; choices: string[] };
   }> {
     // Use Promise.race to get the first successful OCR result, fallback to both if needed
-    const timeout = 12000; // 12s timeout per OCR call
+    const timeout = 20000; // Increase to 20s timeout per OCR call
     
     try {
       // Try to get the first successful result quickly
       const firstResult = await Promise.race([
         this.extractWithModel(imageBase64, 'openai/gpt-5', timeout),
         this.extractWithModel(imageBase64, 'x-ai/grok-4', timeout),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('OCR race timeout')), timeout))
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('OCR race timeout')), timeout * 0.8)) // 80% of individual timeout
       ]);
       
       // Got a quick result, use it for both (we'll improve this later)
@@ -112,8 +112,8 @@ export class SATRouter {
       console.log('⚠️ Fast OCR failed, falling back to parallel OCR...');
       // Fallback to parallel execution with shorter timeouts
       const [gpt5Result, grok4Result] = await Promise.allSettled([
-        this.extractWithModel(imageBase64, 'openai/gpt-5', 8000),
-        this.extractWithModel(imageBase64, 'x-ai/grok-4', 8000)
+        this.extractWithModel(imageBase64, 'openai/gpt-5', 15000), // Increase to 15s
+        this.extractWithModel(imageBase64, 'x-ai/grok-4', 15000)   // Increase to 15s
       ]);
 
       return {
@@ -123,11 +123,12 @@ export class SATRouter {
     }
   }
 
-  private async extractWithModel(imageBase64: string, model: string, timeoutMs: number = 10000): Promise<{ text: string; choices: string[] }> {
+  private async extractWithModel(imageBase64: string, model: string, timeoutMs: number = 20000): Promise<{ text: string; choices: string[] }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      console.log(`🔄 Starting OCR with ${model} (${timeoutMs}ms timeout)...`);
       const response = await openrouterClient(model, [{
         role: 'user',
         content: [
@@ -145,7 +146,7 @@ export class SATRouter {
       }], {
         max_tokens: 2000,
         temperature: 0.1,
-        timeout_ms: 60000,
+        timeout_ms: timeoutMs, // Use the provided timeout
         // Prefer Azure for OpenAI models for better latency
         ...(model.startsWith('openai/') ? {
           provider: { order: ['azure', 'openai'] }
@@ -153,6 +154,7 @@ export class SATRouter {
       });
 
       clearTimeout(timeoutId);
+      console.log(`✅ OCR with ${model} completed successfully`);
       
       try {
         const parsed = JSON.parse(response.text);
@@ -166,6 +168,7 @@ export class SATRouter {
       }
     } catch (error) {
       clearTimeout(timeoutId);
+      console.error(`❌ OCR with ${model} failed:`, error);
       throw error;
     }
   }
@@ -179,8 +182,8 @@ export class SATRouter {
     subdomain: EbrwDomain | MathDomain;
     hasFigure: boolean;
   }> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 40000); // 40s timeout
+    const timeoutMs = 30000; // Reduce to 30s but be more reliable
+    console.log(`🔄 Classifying question (${timeoutMs}ms timeout)...`);
 
     try {
       let messages;
@@ -221,11 +224,11 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
       const response = await openrouterClient('openai/gpt-5', messages, {
         temperature: 0.1,
         max_tokens: 800,
-        timeout_ms: 40000,
+        timeout_ms: timeoutMs,
         provider: { order: ['azure', 'openai'] }
       });
 
-      clearTimeout(timeoutId);
+      console.log(`✅ Question classification completed`);
 
       let content = response.text;
       
@@ -244,7 +247,7 @@ ${choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('
         hasFigure: result.hasFigure || false
       };
     } catch (error) {
-      clearTimeout(timeoutId);
+      console.error(`❌ Classification failed:`, error);
       throw error;
     }
   }

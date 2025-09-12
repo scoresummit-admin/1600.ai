@@ -48,7 +48,7 @@ export class SATEngine {
     correctAnswer?: string
   ): Promise<AggregatedAnswer> {
     const startTime = Date.now();
-    const maxTimeMs = 60000; // Hard 60s limit for speed
+    const maxTimeMs = 90000; // Increase to 90s to allow for API delays
     
     try {
       console.log('🚀 Starting 1600.ai speed-optimized pipeline (60s budget)...');
@@ -63,11 +63,11 @@ export class SATEngine {
         isGridIn: choices.length === 0
       };
       
-      // Step 1: Route the question (7s budget)
+      // Step 1: Route the question (increased timeout)
       const routedItem = await Promise.race([
         this.router.routeItem(item),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Router timeout')), 15000) // 15s for routing
+          setTimeout(() => reject(new Error('Router timeout')), 25000) // Increase to 25s
         )
       ]);
       
@@ -75,6 +75,7 @@ export class SATEngine {
       console.log(`📍 Routed as ${routedItem.section}/${routedItem.subdomain} in ${routeTime}ms`);
       
       const remainingTime = maxTimeMs - (Date.now() - startTime);
+      console.log(`⏱️ Remaining time after routing: ${remainingTime}ms`);
       
       // Step 2: Solve based on section
       let solverResult;
@@ -84,28 +85,18 @@ export class SATEngine {
         // EBRW Pipeline: Concurrent quartet → Claude/Grok Verifier
         console.log('📚 Solving EBRW question with concurrent quartet...');
         
-        try {
-          solverResult = await Promise.race([
-            this.ebrwSolver.solve(routedItem, Math.min(remainingTime * 0.7, 40000)), // Up to 40s
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('EBRW solver timeout')), Math.min(remainingTime * 0.7, 40000))
-            )
-          ]);
+        const solverTimeout = Math.min(remainingTime * 0.7, 50000); // Increase max to 50s
+        console.log(`⏱️ EBRW solver timeout: ${solverTimeout}ms`);
+        
+        solverResult = await Promise.race([
+          this.ebrwSolver.solve(routedItem, solverTimeout),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('EBRW solver timeout')), solverTimeout)
+          )
+        ]);
+        
+        if (solverResult) {
           console.log(`✅ EBRW solver completed: ${solverResult.final} (${solverResult.confidence.toFixed(2)} confidence)`);
-        } catch (error) {
-          console.error('❌ EBRW solver failed:', error);
-          // Create fallback solution instead of failing completely
-          solverResult = {
-            final: 'A',
-            confidence: 0.15,
-            meta: {
-              domain: 'information_ideas',
-              explanation: 'Solver timeout or error occurred',
-              evidence: ['Fallback due to system error'],
-              elimination_notes: { 'Error': 'Pipeline timeout' }
-            },
-            model: 'fallback'
-          };
         }
         
         // Update metrics for all EBRW models
@@ -114,23 +105,16 @@ export class SATEngine {
         this.metrics.model_usage['x-ai/grok-4']++;
         this.metrics.model_usage['anthropic/claude-sonnet-4']++;
         
-        try {
-          verifierReport = await Promise.race([
-            this.ebrwVerifier.verify(routedItem, solverResult),
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('EBRW verifier timeout')), Math.min(remainingTime * 0.3, 15000))
-            )
-          ]);
+        const verifierTimeout = Math.min(remainingTime * 0.3, 20000); // Increase to 20s
+        verifierReport = await Promise.race([
+          this.ebrwVerifier.verify(routedItem, solverResult),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('EBRW verifier timeout')), verifierTimeout)
+          )
+        ]);
+        
+        if (verifierReport) {
           console.log(`✅ EBRW verifier completed: ${verifierReport.passed ? 'PASSED' : 'FAILED'} (${verifierReport.score.toFixed(2)})`);
-        } catch (error) {
-          console.error('❌ EBRW verifier failed:', error);
-          // Create fallback verification
-          verifierReport = {
-            passed: false,
-            score: 0.3,
-            notes: ['Verifier failed due to error'],
-            checks: ['error']
-          };
         }
         
         // Additional verifier model usage
@@ -141,29 +125,18 @@ export class SATEngine {
         // Math Pipeline: Concurrent trio → Math Verifier
         console.log('🔢 Solving Math question with concurrent trio...');
         
-        try {
-          solverResult = await Promise.race([
-            this.mathSolver.solve(routedItem), // Math solver handles its own timeouts
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Math solver timeout')), Math.min(remainingTime * 0.8, 40000))
-            )
-          ]);
+        const solverTimeout = Math.min(remainingTime * 0.8, 50000); // Increase max to 50s
+        console.log(`⏱️ Math solver timeout: ${solverTimeout}ms`);
+        
+        solverResult = await Promise.race([
+          this.mathSolver.solve(routedItem),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Math solver timeout')), solverTimeout)
+          )
+        ]);
+        
+        if (solverResult) {
           console.log(`✅ Math solver completed: ${solverResult.final} (${solverResult.confidence.toFixed(2)} confidence)`);
-        } catch (error) {
-          console.error('❌ Math solver failed:', error);
-          // Create fallback solution instead of failing completely
-          solverResult = {
-            final: routedItem.choices.length > 0 ? 'A' : '0',
-            confidence: 0.15,
-            meta: {
-              method: 'fallback',
-              explanation: 'Solver timeout or error occurred',
-              python: `# Fallback solution\nresult = "${routedItem.choices.length > 0 ? 'A' : '0'}"`,
-              pythonResult: { ok: false, error: 'Solver timeout' },
-              checks: ['fallback']
-            },
-            model: 'fallback'
-          };
         }
         
         // Update metrics for all Math models
@@ -171,23 +144,16 @@ export class SATEngine {
         this.metrics.model_usage['x-ai/grok-4']++;
         this.metrics.model_usage['deepseek/deepseek-r1']++;
         
-        try {
-          verifierReport = await Promise.race([
-            this.mathVerifier.verify(routedItem, solverResult),
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Math verifier timeout')), Math.min(remainingTime * 0.2, 15000))
-            )
-          ]);
+        const verifierTimeout = Math.min(remainingTime * 0.2, 20000); // Increase to 20s
+        verifierReport = await Promise.race([
+          this.mathVerifier.verify(routedItem, solverResult),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Math verifier timeout')), verifierTimeout)
+          )
+        ]);
+        
+        if (verifierReport) {
           console.log(`✅ Math verifier completed: ${verifierReport.passed ? 'PASSED' : 'FAILED'} (${verifierReport.score.toFixed(2)})`);
-        } catch (error) {
-          console.error('❌ Math verifier failed:', error);
-          // Create fallback verification
-          verifierReport = {
-            passed: false,
-            score: 0.3,
-            notes: ['Verifier failed due to error'],
-            checks: ['error']
-          };
         }
       }
       
@@ -209,23 +175,48 @@ export class SATEngine {
       
     } catch (error) {
       console.error('❌ SAT Engine error:', error);
-      
-      // Return fallback solution
-      const fallbackAnswer: AggregatedAnswer = {
-        answer: 'A',
-        confidence: 0.2,
-        section: 'EBRW',
-        subdomain: 'information_ideas',
-        timeMs: Date.now() - startTime,
-        modelVotes: [],
-        verifier: { passed: false, score: 0.1, notes: ['System error occurred'] },
-        shortExplanation: 'System encountered an error',
-        evidenceOrChecks: ['Error in pipeline']
-      };
-      
-      this.updateMetrics(fallbackAnswer);
-      return fallbackAnswer;
+      throw error; // Re-throw to be handled by UI
     }
+  }
+  
+  private async handleSolverError(error: Error, routedItem: RoutedItem, section: 'EBRW' | 'MATH'): Promise<{
+    solverResult: any;
+    verifierReport: any;
+  }> {
+    console.error(`❌ ${section} solver failed:`, error);
+    
+    // Create fallback solution
+    const solverResult = section === 'EBRW' ? {
+      final: 'A',
+      confidence: 0.15,
+      meta: {
+        domain: 'information_ideas',
+        explanation: 'Solver timeout or error occurred',
+        evidence: ['Fallback due to system error'],
+        elimination_notes: { 'Error': 'Pipeline timeout' }
+      },
+      model: 'fallback'
+    } : {
+      final: routedItem.choices.length > 0 ? 'A' : '0',
+      confidence: 0.15,
+      meta: {
+        method: 'fallback',
+        explanation: 'Solver timeout or error occurred',
+        python: `# Fallback solution\nresult = "${routedItem.choices.length > 0 ? 'A' : '0'}"`,
+        pythonResult: { ok: false, error: 'Solver timeout' },
+        checks: ['fallback']
+      },
+      model: 'fallback'
+    };
+    
+    const verifierReport = {
+      passed: false,
+      score: 0.3,
+      notes: ['Solver failed - using fallback'],
+      checks: ['error']
+    };
+    
+    return { solverResult, verifierReport };
   }
 
   private updateMetrics(answer: AggregatedAnswer, correctAnswer?: string) {
