@@ -175,6 +175,11 @@ export class MathSolver {
     console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
     
     let messages;
+    
+    const userPrompt = `Problem: ${item.question}
+
+${item.choices.length > 0 ? 
+  `Choices:\n${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}\n\nThis is a multiple choice question - return the letter (A, B, C, D) as the answer.` :
   'This is a grid-in question - provide the numeric answer.'
 }
 
@@ -190,7 +195,6 @@ ${userPrompt}
 CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` 
         }
       ];
-    }
     
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,
