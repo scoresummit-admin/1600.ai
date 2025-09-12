@@ -173,42 +173,6 @@ export class MathSolver {
 
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
-    
-    let messages;
-    
-    if (item.imageBase64) {
-      // Image-first approach
-      messages = [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `${SYSTEM_MATH}
-
-Domain: ${item.subdomain}
-
-Solve this SAT math question from the image. MUST include working Python code that sets 'result' variable.
-
-CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${item.imageBase64}`
-              }
-            }
-          ]
-        }
-      ];
-    } else {
-      // Fallback to text-based approach
-      const userPrompt = `Domain: ${item.subdomain}
-
-${item.fullText}
-
-${item.choices.length > 0 ? 
-  `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` :
   'This is a grid-in question - provide the numeric answer.'
 }
 
