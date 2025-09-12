@@ -4,7 +4,7 @@ import { MathSolver } from './math-solver';
 import { EBRWVerifier } from './verifier/ebrw-verifier';
 import { MathVerifier } from './verifier/math-verifier';
 import { SATAggregator } from './core/aggregate';
-import { SatItem, AggregatedAnswer, PerformanceMetrics, RoutedItem } from '../../types/sat';
+import { SatItem, AggregatedAnswer, PerformanceMetrics } from '../../types/sat';
 
 export class SATEngine {
   private router: SATRouter;
