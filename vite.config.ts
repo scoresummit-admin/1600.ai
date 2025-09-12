@@ -16,9 +16,10 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom'],
           ocr: ['tesseract.js']
-      }
-    },
-  },
+              }
+          },
+      },
+  }
   server: {
     port: 3000,
     host: true
