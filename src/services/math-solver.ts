@@ -234,7 +234,10 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     
     let finalAnswer = result.answer;
     let finalConfidence = result.confidence || 0.5;
-    let pythonResult = { ok: false, error: 'No Python code' };
+    let pythonResult: Awaited<ReturnType<typeof runPython>> = {
+      ok: false,
+      error: 'No Python code'
+    };
     
     // Execute Python code if provided
     if (result.python_code) {

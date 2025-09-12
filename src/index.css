@@ -35,18 +35,18 @@
   }
   
   .badge-success {
-    @apply badge bg-success-100 text-success-800;
+    @apply badge bg-success-100 text-success-600;
   }
-  
+
   .badge-warning {
-    @apply badge bg-warning-100 text-warning-800;
+    @apply badge bg-warning-100 text-warning-600;
   }
-  
+
   .badge-error {
-    @apply badge bg-error-100 text-error-800;
+    @apply badge bg-error-100 text-error-600;
   }
-  
+
   .badge-info {
-    @apply badge bg-primary-100 text-primary-800;
+    @apply badge bg-primary-100 text-primary-700;
   }
 }
