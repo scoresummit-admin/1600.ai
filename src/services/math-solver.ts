@@ -173,8 +173,31 @@ export class MathSolver {
 
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
-  'This is a grid-in question - provide the numeric answer.'
-}
+    
+    let messages;
+    
+    if (item.choices.length > 0) {
+      const userPrompt = `Problem: ${item.question}
+
+Choices:
+${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}
+
+MUST include working Python code that sets 'result' variable.`;
+      
+      messages = [
+        { 
+          role: 'user', 
+          content: `${SYSTEM_MATH}
+
+${userPrompt}
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` 
+        }
+      ];
+    } else {
+      const userPrompt = `Problem: ${item.question}
+
+This is a grid-in question - provide the numeric answer.
 
 MUST include working Python code that sets 'result' variable.`;
       

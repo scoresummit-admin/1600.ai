@@ -175,7 +175,137 @@ export class MathSolver {
     console.log(`🔄 Math solving with ${model} (${timeoutMs}ms timeout)...`);
   'This is a grid-in question - provide the numeric answer.'
     
-export class SATEngine {</parameter>
+    // Execute Python code if provided
+    let pythonResult = null;
+    let finalAnswer = result.answer;
+    let finalConfidence = result.confidence;
+    
+    if (result.python_code) {
+      console.log(`🐍 Executing Python verification code for ${model}...`);
+      try {
+        pythonResult = await runPython(result.python_code);
+        
+        if (pythonResult.ok) {
+          const pythonAnswer = String(pythonResult.result);
+          console.log(`🐍 ${model} Python result: ${pythonAnswer}, Model answer: ${finalAnswer}`);
+          
+          // Smart comparison between Python result and model answer
+          if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
+            console.log(`✅ ${model} Python verification confirms model answer`);
+            finalConfidence = Math.min(0.98, finalConfidence + 0.20); // +20% boost for Python confirmation
+          } else {
+            // Check if Python result matches any of the choices
+            const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
+            if (matchingChoice) {
+              console.log(`🔄 ${model} Python result matches choice ${matchingChoice}, overriding model answer`);
+              finalAnswer = matchingChoice;
+              finalConfidence = Math.min(0.95, finalConfidence + 0.15); // +15% boost but override answer
+            } else {
+              console.log(`⚠️ ${model} Python result (${pythonAnswer}) doesn't match model answer (${finalAnswer}) or any choice`);
+              finalConfidence *= 0.8; // Reduce confidence for disagreement
+            }
+          }
+        } else {
+          console.log(`❌ ${model} Python execution failed: ${pythonResult.error}`);
+          finalConfidence *= 0.85; // Small penalty for failed Python execution
+        }
+      } catch (error) {
+        console.error(`${model} Python execution error:`, error);
+        finalConfidence *= 0.85;
+      }
+    } else {
+      console.log(`⚠️ ${model} No Python code provided`);
+      finalConfidence *= 0.8; // Penalty for not providing Python code
+    }
+    
+    return {
+      final: finalAnswer,
+      confidence: Math.max(0.1, Math.min(1.0, finalConfidence)),
+      meta: {
+        method: result.method,
+        explanation: result.explanation,
+        python: result.python_code,
+        pythonResult: pythonResult,
+        checks: ['python_execution', 'symbolic_verification']
+      },
+      model
+    };
+  }
+
+  private async selectBestMathResult(results: SolverResult[]): Promise<SolverResult> {
+    if (results.length === 1) {
+      return results[0];
+    }
+
+    // Prioritize results with successful Python verification
+    const verifiedResults = results.filter(r => r.meta.pythonResult?.ok);
+    
+    if (verifiedResults.length > 0) {
+      // Among verified results, look for consensus
+      const voteCounts = new Map<string, number>();
+      const votesByAnswer = new Map<string, SolverResult[]>();
+      
+      verifiedResults.forEach(result => {
+        const answer = result.final;
+        voteCounts.set(answer, (voteCounts.get(answer) || 0) + 1);
+        if (!votesByAnswer.has(answer)) {
+          votesByAnswer.set(answer, []);
+        }
+        votesByAnswer.get(answer)!.push(result);
+      });
+
+      // Find consensus among verified results
+      let maxVotes = 0;
+      let consensusAnswer = '';
+      
+      for (const [answer, votes] of voteCounts) {
+        if (votes > maxVotes) {
+          maxVotes = votes;
+          consensusAnswer = answer;
+        }
+      }
+
+      // If we have consensus among verified results, use highest confidence from that group
+      if (maxVotes > 1) {
+        const consensusResults = votesByAnswer.get(consensusAnswer)!;
+        return consensusResults.reduce((best, current) => 
+          current.confidence > best.confidence ? current : best
+        );
+      }
+
+      // No consensus among verified - return highest confidence verified result
+      return verifiedResults.reduce((best, current) => 
+        current.confidence > best.confidence ? current : best
+      );
+    }
+
+    // No verified results - fall back to highest confidence overall
+    return results.reduce((best, current) => 
+      current.confidence > best.confidence ? current : best
+    );
+  }
+
+  private compareAnswers(pythonAnswer: string, modelAnswer: string, choices: string[]): boolean {
+    // Clean both answers
+    const cleanPython = pythonAnswer.trim().toLowerCase();
+    const cleanModel = modelAnswer.trim().toLowerCase();
+    
+    // Direct match
+    if (cleanPython === cleanModel) return true;
+    
+    // If model answer is a letter, check if Python result matches the content of that choice
+    if (/^[a-d]$/i.test(modelAnswer)) {
+      const choiceIndex = modelAnswer.toUpperCase().charCodeAt(0) - 65;
+      if (choiceIndex >= 0 && choiceIndex < choices.length) {
+        const choiceContent = this.extractMathExpression(choices[choiceIndex]);
+        return this.compareMathExpressions(cleanPython, choiceContent);
+      }
+    }
+    
+    // Try numeric comparison
+    const num1 = parseFloat(cleanPython);
+    const num2 = parseFloat(cleanModel);
+    
     if (!isNaN(num1) && !isNaN(num2)) {
       return Math.abs(num1 - num2) < 0.001;
     }
