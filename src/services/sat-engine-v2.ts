@@ -1,4 +1,4 @@
-import { SatItem, AggregatedAnswer, PerformanceMetrics } from '../types/sat';
+import { SatItem, AggregatedAnswer, PerformanceMetrics, Section } from '../types/sat';
 import { SATRouter } from './router';
 import { EBRWSolver } from './ebrw-solver';
 import { MathSolver } from './math-solver';
@@ -40,9 +40,10 @@ export class SATEngine {
   }
 
   async solveQuestion(
-    imageBase64: string, 
-    ocrText: string, 
-    choices: string[], 
+    imageBase64: string,
+    ocrText: string,
+    choices: string[],
+    section: Section,
     correctAnswer?: string
   ): Promise<AggregatedAnswer> {
     const startTime = Date.now();
@@ -61,7 +62,7 @@ export class SATEngine {
 
       // 2. Route the item (Router phase)
       console.log('📍 Router phase starting...');
-      const routedItem = await this.router.routeItem(inputItem);
+      const routedItem = await this.router.routeItem(inputItem, section);
       console.log(`📍 Routed as: ${routedItem.section}/${routedItem.subdomain}`);
 
       // 3. Solve based on section (Solver phase)
