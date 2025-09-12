@@ -38,8 +38,8 @@ Example for polynomial addition:
 x = symbols('x')
 expr1 = 2*x**2 + x - 9
 expr2 = x**2 + 6*x + 1
-simplified = expand(expr1 + expr2)
-result = simplified"
+simplified = expr1 + expr2
+result = 'C'"
 }
 
 Always include working Python code that can be executed to verify your answer.`;
