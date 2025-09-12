@@ -1,4 +1,4 @@
-import { RoutedItem, SolverResult } from '../../types/sat';
+import { RoutedItem, SolverResult } from '../types/sat';
 import { runPython } from '../lib/pythonSandbox';
 import { openrouterClient } from './model-clients';
 
@@ -48,7 +48,7 @@ Always include working Python code that can be executed to verify your answer.`;
 const MATH_MODELS = [
   'openai/gpt-5',
   'x-ai/grok-4',
-  'deepseek/deepseek-r1'
+  'qwen/qwen3-235b-a22b-thinking-2507'
 ];
 
 export class MathSolver {
@@ -176,10 +176,39 @@ export class MathSolver {
     
     let messages;
     
-    const userPrompt = `Problem: ${item.question}
+    if (item.imageBase64) {
+      // Image-first approach
+      messages = [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `${SYSTEM_MATH}
+
+Domain: ${item.subdomain}
+
+Solve this SAT math question from the image. MUST include working Python code that sets 'result' variable.
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${item.imageBase64}`
+              }
+            }
+          ]
+        }
+      ];
+    } else {
+      // Fallback to text-based approach
+      const userPrompt = `Domain: ${item.subdomain}
+
+${item.fullText}
 
 ${item.choices.length > 0 ? 
-  `Choices:\n${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}\n\nThis is a multiple choice question - return the letter (A, B, C, D) as the answer.` :
+  `Choices:\n${item.choices.map((choice: string, i: number) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}` :
   'This is a grid-in question - provide the numeric answer.'
 }
 
@@ -195,6 +224,7 @@ ${userPrompt}
 CRITICAL: Return ONLY valid JSON - no markdown, no explanations.` 
         }
       ];
+    }
     
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,

@@ -1,7 +1,7 @@
 // SAT Question Types and Interfaces
-export type SATSection = 'EBRW' | 'Math';
+export type SATSection = 'EBRW' | 'MATH';
 
-export type EBRWDomain = 
+export type EbrwDomain = 
   | 'craft_structure' 
   | 'information_ideas' 
   | 'standard_english_conventions' 
@@ -13,79 +13,72 @@ export type MathDomain =
   | 'problem_solving_data_analysis' 
   | 'geometry_trigonometry';
 
+export type Section = SATSection;
+
 export type ModelName = 
   | 'openai/gpt-5'
   | 'openai/o3'
   | 'x-ai/grok-4'
-  | 'deepseek/deepseek-r1'
+  | 'qwen/qwen3-235b-a22b-thinking-2507'
   | 'anthropic/claude-sonnet-4';
 
-export interface SATQuestion {
-  id: string;
-  prompt_text: string;
+export interface SatItem {
+  source: 'manual' | 'screenshot';
+  promptText?: string;
   choices: string[];
-  is_gridin: boolean;
-  has_figure: boolean;
-  figure_url?: string;
-  extracted_numbers: number[];
-  time_budget_s: number;
+  imageBase64?: string;
+  isGridIn?: boolean;
 }
 
-export interface RouterOutput {
+export interface RoutedItem {
   section: SATSection;
-  subdomain: EBRWDomain | MathDomain;
-  prompt_text: string;
+  subdomain: EbrwDomain | MathDomain;
+  imageBase64?: string;
+  ocrText?: string;
+  fullText: string;
   choices: string[];
-  is_gridin: boolean;
-  has_figure: boolean;
-  extracted_numbers: number[];
-  time_budget_s: number;
+  isGridIn: boolean;
+  hasFigure: boolean;
 }
 
-export interface EBRWSolution {
-  final_choice: 'A' | 'B' | 'C' | 'D';
-  confidence_0_1: number;
-  domain: EBRWDomain;
-  short_explanation: string;
-  evidence: string[];
-  elimination_notes: Record<string, string>;
-  model: ModelName;
-}
-
-export interface MathSolution {
-  answer_value_or_choice: string;
-  confidence_0_1: number;
-  method: 'symbolic' | 'numeric' | 'hybrid';
-  checks: string[];
-  short_explanation: string;
-  model: ModelName;
-  code_hash?: string;
-}
-
-export interface ModelVote {
-  model: ModelName;
-  choice_or_value: string;
+export interface SolverResult {
+  final: string;
   confidence: number;
-  reasoning?: string;
+  meta: {
+    method?: 'symbolic' | 'numeric' | 'hybrid' | 'fallback';
+    domain?: EbrwDomain;
+    explanation?: string;
+    evidence?: string[];
+    elimination_notes?: Record<string, string>;
+    python?: string;
+    pythonResult?: {
+      ok: boolean;
+      result?: any;
+      stdout?: string;
+      error?: string;
+    };
+    checks?: string[];
+  };
+  model: string;
 }
 
-export interface VerificationResult {
+export interface VerifierReport {
   passed: boolean;
-  confidence_adjustment: number;
+  score: number;
   notes: string[];
+  checks?: string[];
 }
 
-export interface SATSolution {
-  final_choice_or_value: string;
+export interface AggregatedAnswer {
+  answer: string;
+  confidence: number;
   section: SATSection;
-  subdomain: EBRWDomain | MathDomain;
-  confidence_0_1: number;
-  time_ms: number;
-  model_votes: ModelVote[];
-  short_explanation: string;
-  evidence_or_checklist: string[];
-  verification_result: VerificationResult;
-  escalated: boolean;
+  subdomain: EbrwDomain | MathDomain;
+  timeMs: number;
+  modelVotes: SolverResult[];
+  verifier: VerifierReport;
+  shortExplanation: string;
+  evidenceOrChecks: string[];
 }
 
 export interface ModelConfig {
