@@ -59,11 +59,10 @@ The chosen answer must be directly supported by your evidence list.
 Elimination notes should name a specific flaw category (see taxonomy).
 Output the JSON only.`;
 
-// EBRW concurrent quartet models
+// EBRW concurrent duo models (removed Grok)
 const EBRW_MODELS = [
   'anthropic/claude-opus-4.1',
-  'openai/gpt-5',
-  'x-ai/grok-4'
+  'openai/gpt-5'
 ];
 
 export class EBRWSolver {
@@ -100,7 +99,7 @@ export class EBRWSolver {
   }
 
   private async raceForResults(item: RoutedItem, individualTimeout: number, totalTimeout: number): Promise<SolverResult[]> {
-    const fastModels = ['anthropic/claude-opus-4.1', 'openai/gpt-5']; // ~5s latency
+    const fastModels = ['anthropic/claude-opus-4.1', 'openai/gpt-5']; // Both are fast now with text input
     
     const allResults: SolverResult[] = [];
     const promises = EBRW_MODELS.map((model, index) => 
@@ -131,19 +130,17 @@ export class EBRWSolver {
       const checkEarlyConsensus = () => {
         if (hasResolved) return;
         
-        const fastResults = allResults.filter(r => fastModels.includes(r.model));
-        
-        // If we have both fast models and they agree, return immediately
-        if (fastResults.length === 2) {
-          const [result1, result2] = fastResults;
+        // If we have both models and they agree, return immediately
+        if (allResults.length === 2) {
+          const [result1, result2] = allResults;
           if (result1.final === result2.final) {
             hasResolved = true;
             clearTimeout(timeoutId);
-            console.log(`🚀 EBRW early consensus: ${result1.final} (both fast models agree, skipping Grok)`);
-            resolve(fastResults);
+            console.log(`🚀 EBRW early consensus: ${result1.final} (both models agree)`);
+            resolve(allResults);
             return;
           } else {
-            console.log(`🔄 EBRW fast models disagree: ${result1.final} vs ${result2.final}, waiting for Grok...`);
+            console.log(`🔄 EBRW models disagree: ${result1.final} vs ${result2.final}`);
           }
         }
       };
@@ -155,12 +152,10 @@ export class EBRWSolver {
             console.log(`✅ EBRW ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
             
             // Track completion
-            if (fastModels.includes(result.model)) {
-              fastCompleted++;
-            }
+            fastCompleted++;
             totalCompleted++;
             
-            // Check for early consensus after each fast model completes
+            // Check for early consensus after each model completes
             checkEarlyConsensus();
             
             // All models completed
@@ -212,10 +207,26 @@ export class EBRWSolver {
   private async solveWithModel(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
     console.log(`🔄 EBRW solving with ${model} (${timeoutMs}ms timeout)...`);
     
-    // Create vision message with image and question
+    // Create message - prefer extracted text over image for EBRW
     const messages = [];
 
-    if (item.imageBase64) {
+    if (item.question && item.choices.length > 0) {
+      // Use extracted text (preferred for EBRW)
+      messages.push({
+        role: 'user',
+        content: `${SYSTEM_EBRW}
+
+Problem: ${item.question}
+
+Choices:
+${item.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}
+
+Domain: ${item.subdomain}
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
+      });
+    } else if (item.imageBase64) {
+      // Fallback to image if text extraction failed
       messages.push({
         role: 'user',
         content: [
@@ -238,7 +249,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         ]
       });
     } else {
-      // Fallback if no image (shouldn't happen with new architecture)
+      // Final fallback
       messages.push({
         role: 'user',
         content: `${SYSTEM_EBRW}

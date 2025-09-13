@@ -1,4 +1,5 @@
 import { SatItem, RoutedItem, Section, EbrwDomain, MathDomain } from '../types/sat';
+import { ImageToTextExtractor } from './image-to-text-extractor';
 
 export const SYSTEM_ROUTER = `You are an expert SAT question router. Classify only the labels needed by the app. Some models may receive images; if so, you may use them to determine has_figure.
 
@@ -17,7 +18,11 @@ Set has_figure = true iff the question meaningfully relies on a chart, graph, di
 If the prompt is text-only (including OCR), set has_figure to false.`;
 
 export class SATRouter {
-  constructor() {}
+  private imageToTextExtractor: ImageToTextExtractor;
+
+  constructor() {
+    this.imageToTextExtractor = new ImageToTextExtractor();
+  }
 
   async routeItem(inputItem: SatItem, providedSection?: Section): Promise<RoutedItem> {
     console.log('📍 SATRouter starting classification...');
@@ -26,17 +31,34 @@ export class SATRouter {
     const section = providedSection || 'EBRW'; // Default to EBRW if not provided
     const subdomain = this.getDefaultSubdomain(section);
 
-    const routedItem: RoutedItem = {
+    let routedItem: RoutedItem = {
       section,
       subdomain,
       imageBase64: inputItem.imageBase64,
-      ocrText: '', // No OCR anymore
-      fullText: '', // Will be extracted by vision models
-      question: '', // Will be extracted by vision models
-      choices: [], // Will be extracted by vision models
-      isGridIn: false, // Will be determined by vision models
+      ocrText: '',
+      fullText: '',
+      question: '',
+      choices: [],
+      isGridIn: false,
       hasFigure: !!inputItem.imageBase64
     };
+
+    // For EBRW questions with images, extract text using GPT-4o
+    if (section === 'EBRW' && inputItem.imageBase64) {
+      try {
+        console.log('📝 Extracting text from image for EBRW question...');
+        const extractedText = await this.imageToTextExtractor.extract(inputItem.imageBase64);
+        
+        routedItem.question = extractedText.question;
+        routedItem.choices = extractedText.choices;
+        routedItem.fullText = `${extractedText.question}\n\nChoices:\n${extractedText.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}`;
+        
+        console.log(`✅ Text extraction completed: ${extractedText.question.length} chars, ${extractedText.choices.length} choices`);
+      } catch (error) {
+        console.error('❌ Text extraction failed:', error);
+        // Fall back to empty text - solvers will still get the image
+      }
+    }
 
     console.log(`📍 Routed as: ${section}/${subdomain}`);
     return routedItem;

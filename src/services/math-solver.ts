@@ -57,11 +57,10 @@ result = sol  # or a number like Fraction(3,5) or float/int
 
 Final step: Output the JSON only.`;
 
-// Math concurrent trio models
+// Math concurrent duo models (removed Claude)
 const MATH_MODELS = [
   'openai/gpt-5',
-  'x-ai/grok-4',
-  'anthropic/claude-opus-4.1'
+  'x-ai/grok-4'
 ];
 
 export class MathSolver {
@@ -97,7 +96,7 @@ export class MathSolver {
   }
 
   private async runConcurrentModels(item: RoutedItem, timeoutMs: number): Promise<SolverResult[]> {
-    const fastModels = ['openai/gpt-5', 'anthropic/claude-4.1-sonnet']; // ~5s latency
+    const fastModels = ['openai/gpt-5']; // GPT-5 is typically faster
     
     const promises = MATH_MODELS.map(async (model) => {
       try {
@@ -119,18 +118,16 @@ export class MathSolver {
       const checkEarlyConsensus = () => {
         if (hasResolved) return;
         
-        const fastResults = allResults.filter(r => fastModels.includes(r.model));
-        
-        // If we have both fast models and they agree, return immediately
-        if (fastResults.length === 2) {
-          const [result1, result2] = fastResults;
+        // If we have both models and they agree, return immediately
+        if (allResults.length === 2) {
+          const [result1, result2] = allResults;
           if (result1.final === result2.final) {
             hasResolved = true;
-            console.log(`🚀 Math early consensus: ${result1.final} (both fast models agree, skipping Grok)`);
-            resolve(fastResults);
+            console.log(`🚀 Math early consensus: ${result1.final} (both models agree)`);
+            resolve(allResults);
             return;
           } else {
-            console.log(`🔄 Math fast models disagree: ${result1.final} vs ${result2.final}, waiting for Grok...`);
+            console.log(`🔄 Math models disagree: ${result1.final} vs ${result2.final}`);
           }
         }
       };
