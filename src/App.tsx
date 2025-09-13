@@ -14,14 +14,13 @@ function App() {
   const handleQuestionSubmit = async (
     imageDataUrl: string,
     section: Section,
-    correctAnswer?: string,
-    useMathOCR: boolean = true
+    correctAnswer?: string
   ) => {
     setIsLoading(true);
     setSolution(null);
 
     try {
-      const result = await satEngine.solveQuestion(imageDataUrl, section, correctAnswer, useMathOCR);
+      const result = await satEngine.solveQuestion(imageDataUrl, section, correctAnswer);
       setSolution(result);
     } catch (error) {
       console.error('Error solving question:', error);

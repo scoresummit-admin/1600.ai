@@ -24,7 +24,7 @@ export class SATRouter {
     this.imageToTextExtractor = new ImageToTextExtractor();
   }
 
-  async routeItem(inputItem: SatItem, providedSection?: Section, useMathOCR?: boolean): Promise<RoutedItem> {
+  async routeItem(inputItem: SatItem, providedSection?: Section): Promise<RoutedItem> {
     console.log('📍 SATRouter starting classification...');
 
     // With vision models, we don't have text upfront - use provided section
@@ -44,7 +44,7 @@ export class SATRouter {
     };
 
     // For EBRW questions with images, extract text using GPT-4o
-    const shouldExtractText = (section === 'EBRW') || (section === 'MATH' && useMathOCR);
+    const shouldExtractText = (section === 'EBRW');
     
     if (shouldExtractText && inputItem.imageBase64) {
       try {
