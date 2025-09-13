@@ -61,7 +61,7 @@ Final step: Output the JSON only.`;
 const MATH_MODELS = [
   'openai/gpt-5',
   'x-ai/grok-4',
-  'anthropic/claude-4.1-sonnet'
+  'anthropic/claude-opus-4.1'
 ];
 
 export class MathSolver {
@@ -69,12 +69,12 @@ export class MathSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 75000; // 75s overall budget - more time for Grok
+    const timeoutMs = 80000; // 80s overall budget - same as EBRW
     console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms overall)...`);
 
     try {
       // Dispatch all three models concurrently
-      const individualTimeout = Math.min(timeoutMs - 5000, 65000); // leave buffer for aggregation
+      const individualTimeout = Math.min(timeoutMs - 5000, 70000); // leave buffer for aggregation
 
       const results = await this.runConcurrentModels(item, individualTimeout);
       console.log(`🔄 Math models completed: ${results.length}/${MATH_MODELS.length} successful`);
