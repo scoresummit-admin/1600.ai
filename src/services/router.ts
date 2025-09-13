@@ -24,7 +24,7 @@ export class SATRouter {
     this.imageToTextExtractor = new ImageToTextExtractor();
   }
 
-  async routeItem(inputItem: SatItem, providedSection?: Section): Promise<RoutedItem> {
+  async routeItem(inputItem: SatItem, providedSection?: Section, useMathOCR?: boolean): Promise<RoutedItem> {
     console.log('📍 SATRouter starting classification...');
 
     // With vision models, we don't have text upfront - use provided section
@@ -44,16 +44,18 @@ export class SATRouter {
     };
 
     // For EBRW questions with images, extract text using GPT-4o
-    if (section === 'EBRW' && inputItem.imageBase64) {
+    const shouldExtractText = (section === 'EBRW') || (section === 'MATH' && useMathOCR);
+    
+    if (shouldExtractText && inputItem.imageBase64) {
       try {
-        console.log('📝 Extracting text from image for EBRW question...');
+        console.log(`📝 Extracting text from image for ${section} question...`);
         const extractedText = await this.imageToTextExtractor.extract(inputItem.imageBase64);
         
         routedItem.question = extractedText.question;
         routedItem.choices = extractedText.choices;
         routedItem.fullText = `${extractedText.question}\n\nChoices:\n${extractedText.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}`;
         
-        console.log(`✅ Text extraction completed: ${extractedText.question.length} chars, ${extractedText.choices.length} choices`);
+        console.log(`✅ ${section} text extraction completed: ${extractedText.question.length} chars, ${extractedText.choices.length} choices`);
       } catch (error) {
         console.error('❌ Text extraction failed:', error);
         // Fall back to empty text - solvers will still get the image

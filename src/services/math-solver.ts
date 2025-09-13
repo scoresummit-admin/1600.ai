@@ -192,7 +192,55 @@ export class MathSolver {
     // Create vision message with image
     const messages = [];
 
-    if (item.imageBase64) {
+    // Use extracted text if available, otherwise fall back to image
+    if (item.question && item.choices.length > 0) {
+      // Use extracted text (when OCR is enabled)
+      const isGridIn = item.choices.length === 0;
+      const questionTypeInstruction = isGridIn 
+        ? "This is a grid-in question - provide the numeric answer."
+        : "This is a multiple choice question - choose A, B, C, or D.";
+
+      let content = `${SYSTEM_MATH}
+
+Problem: ${item.question}
+
+${isGridIn ? '' : `Choices:
+${item.choices.map((choice, i) => `${String.fromCharCode(65 + i)}) ${choice}`).join('\n')}
+
+`}${questionTypeInstruction}
+
+MUST include working Python code that sets 'result' variable.
+
+CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`;
+
+      // If we have both text and image, include image for visual context (diagrams, graphs)
+      if (item.imageBase64) {
+        console.log(`🔄 Math ${model} using extracted text + image for visual context`);
+        messages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: content + '\n\nNote: The image is provided for visual context (diagrams, graphs, figures).'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: item.imageBase64
+              }
+            }
+          ]
+        });
+      } else {
+        console.log(`🔄 Math ${model} using extracted text only`);
+        messages.push({
+          role: 'user',
+          content: content
+        });
+      }
+    } else if (item.imageBase64) {
+      // Fallback to image-only (when OCR is disabled or failed)
+      console.log(`🔄 Math ${model} using image only (no extracted text)`);
       const isGridIn = item.choices.length === 0;
       const questionTypeInstruction = isGridIn 
         ? "This is a grid-in question - provide the numeric answer."
@@ -222,7 +270,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         ]
       });
     } else {
-      // Fallback if no image (shouldn't happen with new architecture)
+      // Final fallback if no image and no extracted text
       const isGridIn = item.choices.length === 0;
       const userPrompt = isGridIn 
         ? `Problem: ${item.question}\n\nThis is a grid-in question - provide the numeric answer.`

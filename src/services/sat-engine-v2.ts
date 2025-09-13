@@ -41,7 +41,8 @@ export class SATEngine {
   async solveQuestion(
     imageDataUrl: string,
     section: Section,
-    correctAnswer?: string
+    correctAnswer?: string,
+    useMathOCR: boolean = true
   ): Promise<AggregatedAnswer> {
     const startTime = Date.now();
     
@@ -58,7 +59,7 @@ export class SATEngine {
 
       // 2. Route the item (Router phase)
       console.log('📍 Router phase starting...');
-      const routedItem = await this.router.routeItem(inputItem, section);
+      const routedItem = await this.router.routeItem(inputItem, section, useMathOCR);
       console.log(`📍 Routed as: ${routedItem.section}/${routedItem.subdomain}`);
 
       // 3. Solve based on section (Solver phase)
