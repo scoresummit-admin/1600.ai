@@ -245,7 +245,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,
-      max_tokens: 4000,
+      max_tokens: 8000,
       timeout_ms: timeoutMs,
       // Prefer Azure for OpenAI models for better latency
       ...(model.startsWith('openai/') ? {
