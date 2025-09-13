@@ -69,12 +69,12 @@ export class MathSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 80000; // 80s overall budget - same as EBRW
+    const timeoutMs = 90000; // 90s overall budget
     console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms overall)...`);
 
     try {
       // Dispatch all three models concurrently
-      const individualTimeout = Math.min(timeoutMs - 5000, 70000); // leave buffer for aggregation
+      const individualTimeout = Math.min(timeoutMs - 5000, 85000); // leave buffer for aggregation
 
       const results = await this.runConcurrentModels(item, individualTimeout);
       console.log(`🔄 Math models completed: ${results.length}/${MATH_MODELS.length} successful`);
