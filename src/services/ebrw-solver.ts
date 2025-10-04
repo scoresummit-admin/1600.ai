@@ -314,9 +314,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       });
     }
     
-    const response = await openrouterClient(model, messages, {
+    const { response, modelUsed } = await this.invokeWithFallback(model, messages, {
       temperature: 0.05,
-      max_tokens: 5000,
+      max_tokens: 8000,
       timeout_ms: timeoutMs
     });
     
@@ -344,9 +344,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`${model} JSON parse error:`, error);
-      console.error(`${model} raw response:`, response.text.substring(0, 1000) + '...');
-      throw new Error(`Invalid JSON response from ${model}: ${errorMessage}`);
+      console.error(`${modelUsed} JSON parse error:`, error);
+      console.error(`${modelUsed} raw response:`, response.text.substring(0, 1000) + '...');
+      throw new Error(`Invalid JSON response from ${modelUsed}: ${errorMessage}`);
     }
     
     const finalAnswer = result.answer || 'A';
@@ -367,8 +367,41 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         elimination_notes: result.elimination,
         checks: ['evidence_extraction', 'choice_elimination']
       },
-      model
+      model: modelUsed
     };
+  }
+
+  private async invokeWithFallback(
+    primaryModel: string,
+    messages: Array<{ role: string; content: string | Array<any> }>,
+    options: { temperature: number; max_tokens: number; timeout_ms: number }
+  ): Promise<{ response: Awaited<ReturnType<typeof openrouterClient>>; modelUsed: string }> {
+    try {
+      const response = await openrouterClient(primaryModel, messages, options);
+      return { response, modelUsed: primaryModel };
+    } catch (error) {
+      if (primaryModel === 'openai/o3-pro' && this.isVerificationFailure(error)) {
+        console.warn('⚠️ O3 Pro verification error (400). Falling back to anthropic/claude-opus-4.1...');
+        try {
+          const response = await openrouterClient('anthropic/claude-opus-4.1', messages, options);
+          return { response, modelUsed: 'anthropic/claude-opus-4.1' };
+        } catch (fallbackError) {
+          console.warn('⚠️ Anthropic fallback failed after O3 Pro 400:', fallbackError);
+          throw error;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private isVerificationFailure(error: unknown): boolean {
+    if (error instanceof Error) {
+      return /\b400\b/.test(error.message);
+    }
+
+    const message = typeof error === 'string' ? error : '';
+    return /\b400\b/.test(message);
   }
 
   private async selectBestEBRWResult(results: SolverResult[]): Promise<SolverResult> {

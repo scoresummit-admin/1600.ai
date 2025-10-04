@@ -34,9 +34,9 @@ export interface SATTranscription {
   figures: SATTranscriptionFigure[];
   notes: string[];
   questions: SATTranscriptionQuestion[];
-  passage: string;
-  question: string;
-  choices: string[];
+  passage?: string;
+  question?: string;
+  choices?: string[];
 }
 
 const SYSTEM_IMAGE_TO_TEXT = `You are an expert OCR-style transcriber for SAT Reading & Writing screenshots.
@@ -56,7 +56,12 @@ STRICT TRANSCRIPTION RULES
   * Do NOT estimate or infer numeric values that are not printed.
   * If it is a table, also populate "table.headers" and "table.rows" cell-by-cell.
 - If a screenshot contains more than one question, include all in "questions" in order of appearance.
-  Also populate the backward-compat fields ("passage", "question", "choices") from the first question.
+  If compat mode is explicitly requested, also populate the backward-compat fields ("passage", "question", "choices") from the first question.
+
+INSTRUCTIONS vs STEM
+- "instructions" = general or section-level directions not specific to one item.
+- If the only instruction text is identical to a question stem in this image, set "instructions": "".
+- Populate top-level aliases ("passage","question","choices") ONLY if explicitly requested (compat mode). Otherwise omit them.
 
 JSON SCHEMA (fill every applicable field; use empty strings or empty arrays if absent)
 {
@@ -144,9 +149,12 @@ export class ImageToTextExtractor {
       const transcription = this.normalizeTranscription(result);
 
       const firstQuestion = transcription.questions[0];
-      const questionText = transcription.question || firstQuestion?.stem || '';
-      const choices = transcription.choices.length > 0
-        ? transcription.choices
+      const questionText = transcription.question && transcription.question.trim().length > 0
+        ? transcription.question
+        : firstQuestion?.stem || '';
+      const compatChoices = Array.isArray(transcription.choices) ? transcription.choices : undefined;
+      const choices = compatChoices && compatChoices.length > 0
+        ? compatChoices
         : firstQuestion?.choices || [];
 
       console.log(`✅ ImageToTextExtractor completed: captured ${questionText.length} chars question, ${choices.length} choices, ${transcription.passages.length} passage(s)`);
@@ -202,20 +210,39 @@ export class ImageToTextExtractor {
         }))
       : [];
 
+    const rawInstructions = ensureString(raw?.instructions);
+    const trimmedInstruction = rawInstructions.trim();
+    const questionStemSet = new Set(
+      questions
+        .map(question => question.stem.trim())
+        .filter(stem => stem.length > 0)
+    );
+
+    const normalizedInstructions = trimmedInstruction && questionStemSet.has(trimmedInstruction)
+      ? ''
+      : rawInstructions;
+
+    const compatPassage = typeof raw?.passage === 'string' && raw.passage.length > 0 ? raw.passage : undefined;
+    const compatQuestion = typeof raw?.question === 'string' && raw.question.length > 0 ? raw.question : undefined;
+    const compatChoicesProvided = Array.isArray(raw?.choices);
+    const compatChoices = compatChoicesProvided
+      ? raw.choices.map(ensureString)
+      : undefined;
+
     return {
       metadata: {
         question_number: ensureStringOrNull(metadata?.question_number),
         section_label: ensureStringOrNull(metadata?.section_label),
         source_attribution: ensureStringOrNull(metadata?.source_attribution)
       },
-      instructions: ensureString(raw?.instructions),
+      instructions: normalizedInstructions,
       passages,
       figures,
       notes: Array.isArray(raw?.notes) ? raw.notes.map(ensureString) : [],
       questions,
-      passage: ensureString(raw?.passage),
-      question: ensureString(raw?.question),
-      choices: Array.isArray(raw?.choices) ? raw.choices.map(ensureString) : []
+      ...(compatPassage ? { passage: compatPassage } : {}),
+      ...(compatQuestion ? { question: compatQuestion } : {}),
+      ...(compatChoicesProvided ? { choices: compatChoices ?? [] } : {})
     };
   }
 }

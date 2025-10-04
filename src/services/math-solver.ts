@@ -185,7 +185,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       });
     }
     
-    const response = await openrouterClient(model, messages, {
+    const { response, modelUsed } = await this.invokeWithFallback(model, messages, {
       temperature: 0.05,
       max_tokens: 8000,
       timeout_ms: timeoutMs
@@ -196,8 +196,8 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       const cleanedResponse = response.text.replace(/```json\s*|\s*```/g, '').trim();
       result = JSON.parse(cleanedResponse);
     } catch (error) {
-      console.error(`${model} JSON parse error:`, error);
-      throw new Error(`Invalid JSON response from ${model}`);
+      console.error(`${modelUsed} JSON parse error:`, error);
+      throw new Error(`Invalid JSON response from ${modelUsed}`);
     }
     
     const rawAnswer = result.answer;
@@ -216,34 +216,34 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         
         if (pythonExecResult.ok) {
           const pythonAnswer = String(pythonExecResult.result).trim();
-          console.log(`🐍 ${model} Python result: ${pythonAnswer}`);
+          console.log(`🐍 ${modelUsed} Python result: ${pythonAnswer}`);
           
           // Compare Python result with model answer
           if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
-            console.log(`✅ ${model} Python result matches model answer`);
+            console.log(`✅ ${modelUsed} Python result matches model answer`);
             finalConfidence = Math.min(0.95, finalConfidence + 0.1); // +10% boost for verification
           } else {
             // Check if Python result matches any choice
             const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
             if (matchingChoice) {
-              console.log(`🔄 ${model} Python result matches choice ${matchingChoice}, overriding model answer`);
+              console.log(`🔄 ${modelUsed} Python result matches choice ${matchingChoice}, overriding model answer`);
               finalAnswer = matchingChoice;
               finalConfidence = Math.min(0.95, finalConfidence + 0.15); // +15% boost but override answer
             } else {
-              console.log(`⚠️ ${model} Python result (${pythonAnswer}) doesn't match model answer (${finalAnswer}) or any choice`);
+              console.log(`⚠️ ${modelUsed} Python result (${pythonAnswer}) doesn't match model answer (${finalAnswer}) or any choice`);
               finalConfidence *= 0.8; // Reduce confidence for disagreement
             }
           }
         } else {
-          console.log(`❌ ${model} Python execution failed: ${pythonResult.error}`);
+          console.log(`❌ ${modelUsed} Python execution failed: ${pythonResult.error}`);
           finalConfidence *= 0.85; // Small penalty for failed Python execution
         }
       } catch (error) {
-        console.error(`${model} Python execution error:`, error);
+        console.error(`${modelUsed} Python execution error:`, error);
         finalConfidence *= 0.85;
       }
     } else {
-      console.log(`⚠️ ${model} No Python code provided`);
+      console.log(`⚠️ ${modelUsed} No Python code provided`);
       finalConfidence *= 0.8; // Penalty for not providing Python code
     }
     
@@ -257,8 +257,41 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         pythonResult: pythonResult,
         checks: ['python_execution', 'symbolic_verification']
       },
-      model
+      model: modelUsed
     };
+  }
+
+  private async invokeWithFallback(
+    primaryModel: string,
+    messages: Array<{ role: string; content: string | Array<any> }>,
+    options: { temperature: number; max_tokens: number; timeout_ms: number }
+  ): Promise<{ response: Awaited<ReturnType<typeof openrouterClient>>; modelUsed: string }> {
+    try {
+      const response = await openrouterClient(primaryModel, messages, options);
+      return { response, modelUsed: primaryModel };
+    } catch (error) {
+      if (primaryModel === 'openai/o3-pro' && this.isVerificationFailure(error)) {
+        console.warn('⚠️ Math solver O3 Pro verification error (400). Switching to anthropic/claude-opus-4.1 fallback.');
+        try {
+          const response = await openrouterClient('anthropic/claude-opus-4.1', messages, options);
+          return { response, modelUsed: 'anthropic/claude-opus-4.1' };
+        } catch (fallbackError) {
+          console.warn('⚠️ Math solver fallback failed after O3 Pro 400:', fallbackError);
+          throw error;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private isVerificationFailure(error: unknown): boolean {
+    if (error instanceof Error) {
+      return /\b400\b/.test(error.message);
+    }
+
+    const message = typeof error === 'string' ? error : '';
+    return /\b400\b/.test(message);
   }
 
   private async selectBestMathResult(results: SolverResult[]): Promise<SolverResult> {
