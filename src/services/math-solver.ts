@@ -57,9 +57,9 @@ result = sol  # or a number like Fraction(3,5) or float/int
 
 Final step: Output the JSON only.`;
 
-// Math solver now uses OpenAI O3 Pro exclusively via OpenRouter
+// Math solver now uses OpenAI GPT-5 as the primary model via OpenRouter
 const MATH_MODELS = [
-  'openai/o3-pro'
+  'openai/gpt-5'
 ];
 
 export class MathSolver {
@@ -270,13 +270,13 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       const response = await openrouterClient(primaryModel, messages, options);
       return { response, modelUsed: primaryModel };
     } catch (error) {
-      if (primaryModel === 'openai/o3-pro' && this.isVerificationFailure(error)) {
-        console.warn('⚠️ Math solver O3 Pro verification error (400). Switching to openai/gpt-5 fallback.');
+      if (primaryModel === 'openai/gpt-5' && this.isVerificationFailure(error)) {
+        console.warn('⚠️ Math solver GPT-5 verification error (400). Switching to x-ai/grok-4 fallback.');
         try {
-          const response = await openrouterClient('openai/gpt-5', messages, options);
-          return { response, modelUsed: 'openai/gpt-5' };
+          const response = await openrouterClient('x-ai/grok-4', messages, options);
+          return { response, modelUsed: 'x-ai/grok-4' };
         } catch (fallbackError) {
-          console.warn('⚠️ Math solver fallback failed after O3 Pro 400:', fallbackError);
+          console.warn('⚠️ Math solver fallback failed after GPT-5 400:', fallbackError);
           throw error;
         }
       }

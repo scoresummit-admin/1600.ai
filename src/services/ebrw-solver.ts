@@ -111,9 +111,9 @@ The chosen answer must be directly supported by your evidence list.
 Elimination notes should name a specific flaw category (see taxonomy).
 Output the JSON only.`;
 
-// EBRW solver uses OpenAI O3 Pro exclusively (transcription still provided by o4 pipeline)
+// EBRW solver uses OpenAI GPT-5 as the primary reasoning model (transcription still provided by o4 pipeline)
 const EBRW_MODELS = [
-  'openai/o3-pro'
+  'openai/gpt-5'
 ];
 
 export class EBRWSolver {
@@ -380,13 +380,13 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       const response = await openrouterClient(primaryModel, messages, options);
       return { response, modelUsed: primaryModel };
     } catch (error) {
-      if (primaryModel === 'openai/o3-pro' && this.isVerificationFailure(error)) {
-        console.warn('⚠️ O3 Pro verification error (400). Falling back to openai/gpt-5...');
+      if (primaryModel === 'openai/gpt-5' && this.isVerificationFailure(error)) {
+        console.warn('⚠️ GPT-5 verification error (400). Falling back to anthropic/claude-4.1-sonnet...');
         try {
-          const response = await openrouterClient('openai/gpt-5', messages, options);
-          return { response, modelUsed: 'openai/gpt-5' };
+          const response = await openrouterClient('anthropic/claude-4.1-sonnet', messages, options);
+          return { response, modelUsed: 'anthropic/claude-4.1-sonnet' };
         } catch (fallbackError) {
-          console.warn('⚠️ openai/gpt-5 fallback failed after O3 Pro 400:', fallbackError);
+          console.warn('⚠️ anthropic/claude-4.1-sonnet fallback failed after GPT-5 400:', fallbackError);
           throw error;
         }
       }
