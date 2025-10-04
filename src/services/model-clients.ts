@@ -8,6 +8,9 @@ interface ModelOptions {
   max_tokens?: number;
   timeout_ms?: number;
   provider?: any;
+  reasoning?: {
+    effort: 'minimal' | 'low' | 'medium' | 'high';
+  };
 }
 
 export async function openrouterClient(
@@ -77,3 +80,84 @@ export async function openrouterClient(
     throw error;
   }
 }
+
+export async function openaiResponsesClient(
+  model: string,
+  messages: Array<{ role: string; content: string | Array<any> }>,
+  options: ModelOptions = {}
+): Promise<ModelResponse> {
+  const controller = new AbortController();
+  const timeoutMs = options.timeout_ms || 75000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  console.log(`🔄 OpenAI ${model} request via Responses API (${timeoutMs}ms timeout)...`);
+
+  try {
+    const requestBody: Record<string, any> = {
+      model,
+      input: messages.map(message => ({
+        role: message.role,
+        content: message.content
+      }))
+    };
+
+    if (typeof options.temperature === 'number') {
+      requestBody.temperature = options.temperature;
+    }
+
+    if (typeof options.max_tokens === 'number') {
+      requestBody.max_output_tokens = options.max_tokens;
+    }
+
+    if (options.reasoning) {
+      requestBody.reasoning = options.reasoning;
+    }
+
+    const response = await fetch('/api/openai/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    console.log(`✅ OpenAI ${model} response received (${response.status})`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ OpenAI ${model} error: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(`OpenAI proxy error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const textFromOutput = Array.isArray(data.output_text)
+      ? data.output_text.join('\n')
+      : data.output_text;
+
+    const fallbackText = Array.isArray(data.output)
+      ? data.output
+          .map((segment: any) =>
+            Array.isArray(segment.content)
+              ? segment.content
+                  .map((part: any) => part?.text || part?.content || '')
+                  .join('')
+              : ''
+          )
+          .join('\n')
+      : '';
+
+    const text = (textFromOutput || fallbackText || '').trim();
+
+    console.log(`🎯 OpenAI ${model} completed successfully (${text.length} chars)`);
+
+    return { raw: data, text };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.error(`❌ OpenAI ${model} request failed:`, error);
+    throw error;
+  }
+}
+

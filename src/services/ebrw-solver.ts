@@ -1,5 +1,5 @@
 import { RoutedItem, SolverResult } from '../types/sat';
-import { openrouterClient } from './model-clients';
+import { openaiResponsesClient, openrouterClient } from './model-clients';
 
 const SYSTEM_EBRW = `You are an expert SAT Evidence-Based Reading & Writing (EBRW) solver.
 
@@ -57,24 +57,99 @@ Concision rule: When two choices are both grammatical and preserve meaning, choo
 Final Check (before output)
 The chosen answer must be directly supported by your evidence list.
 Elimination notes should name a specific flaw category (see taxonomy).
-Output the JSON only.`;
+Output the JSON only.
 
-// EBRW concurrent duo models (removed Grok)
-const EBRW_MODELS = [
-  'anthropic/claude-opus-4.1',
-  'openai/gpt-5'
-];
+=====================================================
+R&W: EXPRESSION OF IDEAS PLAYBOOK (HIGH PRIORITY)
+(“Expression of Ideas” = revise to improve effectiveness for a SPECIFIED rhetorical goal: clarity, cohesion, accuracy, and purpose alignment.)
+=====================================================
+
+1) TRANSITIONS (relationship logic first, word choice second)
+   - Identify the relationship between the prior and next idea:
+     * Addition/Continuation → "also", "furthermore", "moreover"
+     * Contrast/Concession → "however", "nevertheless", "though", "whereas"
+     * Cause/Effect → "therefore", "consequently", "thus", "so"
+     * Example/Illustration → "for example", "for instance"
+     * Emphasis → "indeed", "in fact"
+     * Sequence/Time → "then", "subsequently", "earlier", "finally"
+     * Comparison/Similarity → "likewise", "similarly"
+   - Algorithm:
+     a) Read the sentence before and after the blank; summarize each in 3–5 mental words.
+     b) Choose the transition category that preserves the *exact* logical link.
+     c) Prefer the simplest, non-redundant option; avoid double-marking (e.g., “But however,”).
+     d) Check punctuation compatibility: conjunctive adverbs (e.g., "however") need proper clause joining (semicolon/period), while FANBOYS join with a comma.
+     e) Re-read with the candidate in place; if meaning shifts or redundancy appears, reject.
+
+2) RHETORICAL SYNTHESIS (meet the stated goal precisely)
+   - Read the directive (e.g., “Which option best accomplishes the goal of emphasizing ___ / summarizing ___ / highlighting contrast / matching audience ____?”).
+   - Choose the option that:
+     a) DIRECTLY addresses the specified goal words,
+     b) Uses only supportable information from the notes/passage,
+     c) Preserves tone/register and avoids exaggeration or new, unsupported claims,
+     d) Maximizes clarity and concision (no fluff, no hedging unless required).
+   - If two options are plausible, prefer the one with narrower, more directly targeted language over vague generalities.
+
+3) CONCISION & PRECISION (delete needless words; keep meaning exact)
+   - Replace wordy phrases with concise equivalents:
+     * “due to the fact that” → “because”
+     * “in order to” → “to”
+     * “is a person who” → “is”
+     * “at this point in time” → “now”
+   - Eliminate redundancy (“each and every”, “various different”).
+   - Prefer precise verbs over weak verb + noun (“make a decision” → “decide”).
+   - Avoid ambiguous pronouns; specify the noun if clarity improves.
+
+4) TONE & STYLE CONSISTENCY
+   - Match the passage’s formality and perspective.
+   - Avoid colloquialisms or loaded/emotional terms in academic contexts unless the source tone is informal.
+
+5) ADD/DELETE SENTENCE DECISIONS
+   - ADD only if new sentence clearly advances the stated purpose (e.g., clearer example, necessary contrast, key outcome).
+   - DELETE if irrelevant, redundant, off-tone, or contradicts the author goal.
+   - When asked to select a sentence that “best introduces/concludes,” ensure it encapsulates the paragraph’s main point without adding new, unaddressed details.
+
+6) ORGANIZATION / SENTENCE PLACEMENT (if applicable)
+   - The chosen location must maintain chronological or logical progression and avoid premature references (no pronoun “this/these/these findings” before antecedent).
+
+QUICK CHECK (run silently before output)
+- For Transitions: Does the category match the actual logical relation? Is punctuation valid? Any redundancy?
+- For Rhetorical Synthesis: Does the option EXACTLY achieve the stated goal using ONLY available support?
+- For Concision: Is there a strictly shorter, equally precise alternative? If yes, prefer it.
+- Evidence: Can you cite ≤8-word text fragments that justify the choice? If not, mark low_confidence true.
+
+=====================================================
+R&W: STANDARD ENGLISH CONVENTIONS MINI-CHECKLIST
+(Use when the item is clearly grammar/editing rather than rhetoric.)
+=====================================================
+- Subject–verb agreement (including tricky subjects: collective nouns, “either/neither”, prepositional distractors).
+- Verb tense & sequence (timeline consistency; simple past vs present; subjunctive in hypotheticals).
+- Pronouns: clear antecedent; case (I/me; who/whom); number/gender agreement; avoid ambiguous “this/that/which” without noun.
+- Modifiers: place next to the word modified; avoid dangling/misplaced modifiers.
+- Parallelism: in lists/comparisons; maintain grammatical form.
+- Comparisons & idioms: compare like with like; correct prepositions/expressions.
+- Punctuation:
+  * Commas: items in a series; nonrestrictive clauses; after introductory elements; NOT for splicing two independent clauses.
+  * Semicolons: link two related independent clauses; or separate complex list items.
+  * Colons: after a complete clause to introduce an explanation/list/definition.
+  * Dashes: set off an interruption or emphatic apposition; be consistent (— —).
+  * Apostrophes: singular vs plural possession (its vs it’s).
+- Diction & commonly confused words (affect/effect, fewer/less, among/between, than/then).
+
+Final Check: Output the JSON only.`;
+
+// EBRW solver now targets a single reasoning-first model
+const EBRW_MODELS = ['openai/gpt-5-thinking'];
 
 export class EBRWSolver {
   constructor() {}
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 80000; // 80s total timeout - more time for Grok
-    console.log(`🔄 EBRW solver starting concurrent trio (${timeoutMs}ms timeout)...`);
-    
+    const timeoutMs = 80000; // 80s total timeout for thinking model
+    console.log(`🔄 EBRW solver starting (${timeoutMs}ms timeout)...`);
+
     try {
-      // Dispatch all four models concurrently
+      // Dispatch all configured models concurrently (currently single model)
       const individualTimeout = Math.min(timeoutMs * 0.9, 70000); // 90% of total timeout, max 70s
       
       const results = await this.raceForResults(item, individualTimeout, timeoutMs);
@@ -127,17 +202,18 @@ export class EBRWSolver {
       
       const checkEarlyConsensus = () => {
         if (hasResolved) return;
-        
-        // If we have both models and they agree, return immediately
-        if (allResults.length === 2) {
+
+        // If we have at least two results and they agree, resolve early
+        if (allResults.length >= 2) {
           const [result1, result2] = allResults;
-          if (result1.final === result2.final) {
+          if (result1 && result2 && result1.final === result2.final) {
             hasResolved = true;
             clearTimeout(timeoutId);
-            console.log(`🚀 EBRW early consensus: ${result1.final} (both models agree)`);
+            console.log(`🚀 EBRW early consensus: ${result1.final} (models agree)`);
             resolve(allResults);
             return;
-          } else {
+          }
+          if (result1 && result2 && result1.final !== result2.final) {
             console.log(`🔄 EBRW models disagree: ${result1.final} vs ${result2.final}`);
           }
         }
@@ -206,15 +282,15 @@ export class EBRWSolver {
     console.log(`🔄 EBRW solving with ${model} (${timeoutMs}ms timeout)...`);
     
     // Create message - prefer extracted text over image for EBRW
-    const messages = [];
+    const messages: Array<{ role: string; content: string | Array<any> }> = [
+      { role: 'system', content: SYSTEM_EBRW }
+    ];
 
     if (item.question && item.choices.length > 0) {
       // Use extracted text (preferred for EBRW)
       messages.push({
         role: 'user',
-        content: `${SYSTEM_EBRW}
-
-Problem: ${item.question}
+        content: `Problem: ${item.question}
 
 Choices:
 ${item.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}
@@ -230,9 +306,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         content: [
           {
             type: 'text',
-            text: `${SYSTEM_EBRW}
-
-Please solve this SAT EBRW question. Extract the question text and answer choices from the image, then provide your solution.
+            text: `Please solve this SAT EBRW question. Extract the question text and answer choices from the image, then provide your solution.
 
 Domain: ${item.subdomain}
 
@@ -250,9 +324,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       // Final fallback
       messages.push({
         role: 'user',
-        content: `${SYSTEM_EBRW}
-
-Problem: ${item.question}
+        content: `Problem: ${item.question}
 
 Choices:
 ${item.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}
@@ -262,12 +334,20 @@ Domain: ${item.subdomain}
 CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       });
     }
-    
-    const response = await openrouterClient(model, messages, {
-      temperature: 0.05,
-      max_tokens: 5000,
-      timeout_ms: timeoutMs
-    });
+
+    const useOpenAIResponses = model === 'openai/gpt-5-thinking';
+    const response = useOpenAIResponses
+      ? await openaiResponsesClient(model, messages, {
+          temperature: 0.05,
+          max_tokens: 5000,
+          timeout_ms: timeoutMs,
+          reasoning: { effort: 'high' }
+        })
+      : await openrouterClient(model, messages, {
+          temperature: 0.05,
+          max_tokens: 5000,
+          timeout_ms: timeoutMs
+        });
     
     let result;
     try {
@@ -298,8 +378,13 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       throw new Error(`Invalid JSON response from ${model}: ${errorMessage}`);
     }
     
-    const finalAnswer = result.answer || 'A';
-    let finalConfidence = result.confidence || 0.5;
+    const finalAnswer = result.answer || result.final_answer || 'A';
+    let finalConfidence =
+      typeof result.confidence === 'number'
+        ? result.confidence
+        : typeof result.confidence_0_1 === 'number'
+          ? result.confidence_0_1
+          : 0.5;
     
     // Boost confidence if evidence was provided
     if (result.evidence && Array.isArray(result.evidence) && result.evidence.length > 0) {
@@ -311,9 +396,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       confidence: Math.max(0.1, Math.min(1.0, finalConfidence)),
       meta: {
         method: 'evidence_based',
-        explanation: result.explanation,
+        explanation: result.short_explanation || result.explanation,
         evidence: result.evidence || [],
-        elimination_notes: result.elimination,
+        elimination_notes: result.elimination_notes || result.elimination,
         checks: ['evidence_extraction', 'choice_elimination']
       },
       model
