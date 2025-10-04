@@ -57,10 +57,9 @@ result = sol  # or a number like Fraction(3,5) or float/int
 
 Final step: Output the JSON only.`;
 
-// Math concurrent duo models (removed Claude)
+// Math solver now uses OpenAI O3 Pro exclusively via OpenRouter
 const MATH_MODELS = [
-  'openai/gpt-5',
-  'x-ai/grok-4'
+  'openai/o3-pro'
 ];
 
 export class MathSolver {
@@ -69,10 +68,10 @@ export class MathSolver {
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
     const timeoutMs = 90000; // 90s overall budget
-    console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms overall)...`);
+    console.log(`🔄 Math solver starting with ${MATH_MODELS.length} model(s) (${timeoutMs}ms overall)...`);
 
     try {
-      // Dispatch all three models concurrently
+      // Dispatch all configured models (currently single-model)
       const individualTimeout = Math.min(timeoutMs - 5000, 85000); // leave buffer for aggregation
 
       const results = await this.runConcurrentModels(item, individualTimeout);
@@ -96,73 +95,19 @@ export class MathSolver {
   }
 
   private async runConcurrentModels(item: RoutedItem, timeoutMs: number): Promise<SolverResult[]> {
-    const fastModels = ['openai/gpt-5']; // GPT-5 is typically faster
-    
-    const promises = MATH_MODELS.map(async (model) => {
-      try {
-        const result = await this.solveWithModelSafe(item, model, timeoutMs);
+    const results: SolverResult[] = [];
+
+    for (const model of MATH_MODELS) {
+      const result = await this.solveWithModelSafe(item, model, timeoutMs);
+      if (result.confidence > 0.1) {
         console.log(`✅ Math ${model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
-        return result;
-      } catch (error) {
-        console.warn(`❌ Math ${model} failed:`, error);
-        return null;
+      } else {
+        console.warn(`⚠️ Math ${model} returned low-confidence fallback (${result.final})`);
       }
-    });
-    
-    return new Promise((resolve) => {
-      const allResults: SolverResult[] = [];
-      let fastCompleted = 0;
-      let totalCompleted = 0;
-      let hasResolved = false;
-      
-      const checkEarlyConsensus = () => {
-        if (hasResolved) return;
-        
-        // If we have both models and they agree, return immediately
-        if (allResults.length === 2) {
-          const [result1, result2] = allResults;
-          if (result1.final === result2.final) {
-            hasResolved = true;
-            console.log(`🚀 Math early consensus: ${result1.final} (both models agree)`);
-            resolve(allResults);
-            return;
-          } else {
-            console.log(`🔄 Math models disagree: ${result1.final} vs ${result2.final}`);
-          }
-        }
-      };
-      
-      promises.forEach(promise => {
-        promise.then(result => {
-          if (result && !hasResolved) {
-            allResults.push(result);
-            console.log(`✅ Math ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
-            
-            // Track completion
-            if (fastModels.includes(result.model)) {
-              fastCompleted++;
-            }
-            totalCompleted++;
-            
-            // Check for early consensus after each fast model completes
-            checkEarlyConsensus();
-            
-            // All models completed
-            if (totalCompleted >= MATH_MODELS.length) {
-              hasResolved = true;
-              console.log(`🚀 Math all models completed with ${allResults.length} results`);
-              resolve(allResults);
-            }
-          } else {
-            totalCompleted++;
-            if (totalCompleted >= MATH_MODELS.length && !hasResolved) {
-              hasResolved = true;
-              resolve(allResults);
-            }
-          }
-        });
-      });
-    });
+      results.push(result);
+    }
+
+    return results;
   }
 
   private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
@@ -243,11 +188,7 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
     const response = await openrouterClient(model, messages, {
       temperature: 0.05,
       max_tokens: 8000,
-      timeout_ms: timeoutMs,
-      // Prefer Azure for OpenAI models for better latency
-      ...(model.startsWith('openai/') ? {
-        provider: { order: ['azure', 'openai'] }
-      } : {})
+      timeout_ms: timeoutMs
     });
     
     let result;
@@ -259,8 +200,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       throw new Error(`Invalid JSON response from ${model}`);
     }
     
-    let finalAnswer = result.answer;
-    let finalConfidence = result.confidence || 0.5;
+    const rawAnswer = result.answer;
+    let finalAnswer = typeof rawAnswer === 'number' ? String(rawAnswer) : (rawAnswer || (item.choices.length > 0 ? 'A' : '0'));
+    let finalConfidence = typeof result.confidence_0_1 === 'number' ? result.confidence_0_1 : (typeof result.confidence === 'number' ? result.confidence : 0.5);
     let pythonResult: Awaited<ReturnType<typeof runPython>> = {
       ok: false,
       error: 'No Python code'
@@ -309,8 +251,8 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       final: finalAnswer,
       confidence: Math.max(0.1, Math.min(1.0, finalConfidence)),
       meta: {
-        method: result.method,
-        explanation: result.explanation,
+        method: typeof result.method === 'string' ? result.method : undefined,
+        explanation: result.short_explanation || result.explanation,
         python: result.python,
         pythonResult: pythonResult,
         checks: ['python_execution', 'symbolic_verification']

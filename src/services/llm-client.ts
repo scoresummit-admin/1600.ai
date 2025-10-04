@@ -3,8 +3,9 @@ import { ModelConfig, ModelName } from '../types/sat';
 // Default configuration for models
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   enabled_models: [
+    'openai/o3-pro',
     'anthropic/claude-opus-4.1',
-    'openai/gpt-5', 
+    'openai/gpt-5',
     'x-ai/grok-4',
     'anthropic/claude-4.1-sonnet'
   ],
@@ -15,6 +16,12 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
 
 // Model capabilities and preferences
 export const MODEL_CAPABILITIES = {
+  'openai/o3-pro': {
+    strengths: ['reasoning', 'math', 'reading'],
+    supports_images: true,
+    context_length: 200000,
+    cost_tier: 'high'
+  },
   'openai/gpt-5': {
     strengths: ['general_reasoning', 'math', 'coding'],
     supports_images: true,
@@ -44,15 +51,15 @@ export const MODEL_CAPABILITIES = {
 export function getModelForTask(task: 'math' | 'ebrw', priority: 'speed' | 'accuracy' = 'accuracy'): ModelName[] {
   if (task === 'math') {
     if (priority === 'speed') {
-      return ['openai/gpt-5', 'x-ai/grok-4', 'anthropic/claude-4.1-sonnet'];
+      return ['openai/o3-pro'];
     } else {
-      return ['openai/gpt-5', 'x-ai/grok-4', 'anthropic/claude-4.1-sonnet'];
+      return ['openai/o3-pro'];
     }
   } else { // EBRW
     if (priority === 'speed') {
-      return ['openai/gpt-5', 'x-ai/grok-4'];
+      return ['openai/o3-pro'];
     } else {
-      return ['anthropic/claude-opus-4.1', 'openai/gpt-5', 'x-ai/grok-4'];
+      return ['openai/o3-pro'];
     }
   }
 }
