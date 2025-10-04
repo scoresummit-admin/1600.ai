@@ -57,10 +57,9 @@ result = sol  # or a number like Fraction(3,5) or float/int
 
 Final step: Output the JSON only.`;
 
-// Math concurrent duo models (removed Claude)
+// Math solver now uses OpenAI O3 Pro exclusively via OpenRouter
 const MATH_MODELS = [
-  'openai/gpt-5',
-  'x-ai/grok-4'
+  'openai/o3-pro'
 ];
 
 export class MathSolver {
@@ -68,12 +67,12 @@ export class MathSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 90000; // 90s overall budget
-    console.log(`🔄 Math solver starting concurrent trio (${timeoutMs}ms overall)...`);
+    const timeoutMs = 180000; // Allow up to 3 minutes for complex problems
+    console.log(`🔄 Math solver starting with ${MATH_MODELS.length} model(s) (${timeoutMs}ms overall)...`);
 
     try {
-      // Dispatch all three models concurrently
-      const individualTimeout = Math.min(timeoutMs - 5000, 85000); // leave buffer for aggregation
+      // Dispatch all configured models (currently single-model)
+      const individualTimeout = Math.max(timeoutMs - 10000, Math.floor(timeoutMs * 0.9)); // leave buffer for aggregation
 
       const results = await this.runConcurrentModels(item, individualTimeout);
       console.log(`🔄 Math models completed: ${results.length}/${MATH_MODELS.length} successful`);
@@ -96,73 +95,19 @@ export class MathSolver {
   }
 
   private async runConcurrentModels(item: RoutedItem, timeoutMs: number): Promise<SolverResult[]> {
-    const fastModels = ['openai/gpt-5']; // GPT-5 is typically faster
-    
-    const promises = MATH_MODELS.map(async (model) => {
-      try {
-        const result = await this.solveWithModelSafe(item, model, timeoutMs);
+    const results: SolverResult[] = [];
+
+    for (const model of MATH_MODELS) {
+      const result = await this.solveWithModelSafe(item, model, timeoutMs);
+      if (result.confidence > 0.1) {
         console.log(`✅ Math ${model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
-        return result;
-      } catch (error) {
-        console.warn(`❌ Math ${model} failed:`, error);
-        return null;
+      } else {
+        console.warn(`⚠️ Math ${model} returned low-confidence fallback (${result.final})`);
       }
-    });
-    
-    return new Promise((resolve) => {
-      const allResults: SolverResult[] = [];
-      let fastCompleted = 0;
-      let totalCompleted = 0;
-      let hasResolved = false;
-      
-      const checkEarlyConsensus = () => {
-        if (hasResolved) return;
-        
-        // If we have both models and they agree, return immediately
-        if (allResults.length === 2) {
-          const [result1, result2] = allResults;
-          if (result1.final === result2.final) {
-            hasResolved = true;
-            console.log(`🚀 Math early consensus: ${result1.final} (both models agree)`);
-            resolve(allResults);
-            return;
-          } else {
-            console.log(`🔄 Math models disagree: ${result1.final} vs ${result2.final}`);
-          }
-        }
-      };
-      
-      promises.forEach(promise => {
-        promise.then(result => {
-          if (result && !hasResolved) {
-            allResults.push(result);
-            console.log(`✅ Math ${result.model} completed: ${result.final} (${result.confidence.toFixed(2)})`);
-            
-            // Track completion
-            if (fastModels.includes(result.model)) {
-              fastCompleted++;
-            }
-            totalCompleted++;
-            
-            // Check for early consensus after each fast model completes
-            checkEarlyConsensus();
-            
-            // All models completed
-            if (totalCompleted >= MATH_MODELS.length) {
-              hasResolved = true;
-              console.log(`🚀 Math all models completed with ${allResults.length} results`);
-              resolve(allResults);
-            }
-          } else {
-            totalCompleted++;
-            if (totalCompleted >= MATH_MODELS.length && !hasResolved) {
-              hasResolved = true;
-              resolve(allResults);
-            }
-          }
-        });
-      });
-    });
+      results.push(result);
+    }
+
+    return results;
   }
 
   private async solveWithModelSafe(item: RoutedItem, model: string, timeoutMs: number): Promise<SolverResult> {
@@ -240,14 +185,10 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       });
     }
     
-    const response = await openrouterClient(model, messages, {
+    const { response, modelUsed } = await this.invokeWithFallback(model, messages, {
       temperature: 0.05,
       max_tokens: 8000,
-      timeout_ms: timeoutMs,
-      // Prefer Azure for OpenAI models for better latency
-      ...(model.startsWith('openai/') ? {
-        provider: { order: ['azure', 'openai'] }
-      } : {})
+      timeout_ms: timeoutMs
     });
     
     let result;
@@ -255,12 +196,13 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       const cleanedResponse = response.text.replace(/```json\s*|\s*```/g, '').trim();
       result = JSON.parse(cleanedResponse);
     } catch (error) {
-      console.error(`${model} JSON parse error:`, error);
-      throw new Error(`Invalid JSON response from ${model}`);
+      console.error(`${modelUsed} JSON parse error:`, error);
+      throw new Error(`Invalid JSON response from ${modelUsed}`);
     }
     
-    let finalAnswer = result.answer;
-    let finalConfidence = result.confidence || 0.5;
+    const rawAnswer = result.answer;
+    let finalAnswer = typeof rawAnswer === 'number' ? String(rawAnswer) : (rawAnswer || (item.choices.length > 0 ? 'A' : '0'));
+    let finalConfidence = typeof result.confidence_0_1 === 'number' ? result.confidence_0_1 : (typeof result.confidence === 'number' ? result.confidence : 0.5);
     let pythonResult: Awaited<ReturnType<typeof runPython>> = {
       ok: false,
       error: 'No Python code'
@@ -274,34 +216,34 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         
         if (pythonExecResult.ok) {
           const pythonAnswer = String(pythonExecResult.result).trim();
-          console.log(`🐍 ${model} Python result: ${pythonAnswer}`);
+          console.log(`🐍 ${modelUsed} Python result: ${pythonAnswer}`);
           
           // Compare Python result with model answer
           if (this.compareAnswers(pythonAnswer, finalAnswer, item.choices)) {
-            console.log(`✅ ${model} Python result matches model answer`);
+            console.log(`✅ ${modelUsed} Python result matches model answer`);
             finalConfidence = Math.min(0.95, finalConfidence + 0.1); // +10% boost for verification
           } else {
             // Check if Python result matches any choice
             const matchingChoice = this.findMatchingChoice(pythonAnswer, item.choices);
             if (matchingChoice) {
-              console.log(`🔄 ${model} Python result matches choice ${matchingChoice}, overriding model answer`);
+              console.log(`🔄 ${modelUsed} Python result matches choice ${matchingChoice}, overriding model answer`);
               finalAnswer = matchingChoice;
               finalConfidence = Math.min(0.95, finalConfidence + 0.15); // +15% boost but override answer
             } else {
-              console.log(`⚠️ ${model} Python result (${pythonAnswer}) doesn't match model answer (${finalAnswer}) or any choice`);
+              console.log(`⚠️ ${modelUsed} Python result (${pythonAnswer}) doesn't match model answer (${finalAnswer}) or any choice`);
               finalConfidence *= 0.8; // Reduce confidence for disagreement
             }
           }
         } else {
-          console.log(`❌ ${model} Python execution failed: ${pythonResult.error}`);
+          console.log(`❌ ${modelUsed} Python execution failed: ${pythonResult.error}`);
           finalConfidence *= 0.85; // Small penalty for failed Python execution
         }
       } catch (error) {
-        console.error(`${model} Python execution error:`, error);
+        console.error(`${modelUsed} Python execution error:`, error);
         finalConfidence *= 0.85;
       }
     } else {
-      console.log(`⚠️ ${model} No Python code provided`);
+      console.log(`⚠️ ${modelUsed} No Python code provided`);
       finalConfidence *= 0.8; // Penalty for not providing Python code
     }
     
@@ -309,14 +251,47 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       final: finalAnswer,
       confidence: Math.max(0.1, Math.min(1.0, finalConfidence)),
       meta: {
-        method: result.method,
-        explanation: result.explanation,
+        method: typeof result.method === 'string' ? result.method : undefined,
+        explanation: result.short_explanation || result.explanation,
         python: result.python,
         pythonResult: pythonResult,
         checks: ['python_execution', 'symbolic_verification']
       },
-      model
+      model: modelUsed
     };
+  }
+
+  private async invokeWithFallback(
+    primaryModel: string,
+    messages: Array<{ role: string; content: string | Array<any> }>,
+    options: { temperature: number; max_tokens: number; timeout_ms: number }
+  ): Promise<{ response: Awaited<ReturnType<typeof openrouterClient>>; modelUsed: string }> {
+    try {
+      const response = await openrouterClient(primaryModel, messages, options);
+      return { response, modelUsed: primaryModel };
+    } catch (error) {
+      if (primaryModel === 'openai/o3-pro' && this.isVerificationFailure(error)) {
+        console.warn('⚠️ Math solver O3 Pro verification error (400). Switching to openai/gpt-5 fallback.');
+        try {
+          const response = await openrouterClient('openai/gpt-5', messages, options);
+          return { response, modelUsed: 'openai/gpt-5' };
+        } catch (fallbackError) {
+          console.warn('⚠️ Math solver fallback failed after O3 Pro 400:', fallbackError);
+          throw error;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private isVerificationFailure(error: unknown): boolean {
+    if (error instanceof Error) {
+      return /\b400\b/.test(error.message);
+    }
+
+    const message = typeof error === 'string' ? error : '';
+    return /\b400\b/.test(message);
   }
 
   private async selectBestMathResult(results: SolverResult[]): Promise<SolverResult> {

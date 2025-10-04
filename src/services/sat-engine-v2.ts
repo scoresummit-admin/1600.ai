@@ -30,9 +30,9 @@ export class SATEngine {
       p95_latency_ms: 0,
       escalation_rate: 0,
       model_usage: {
+        'openai/o3-pro': 0,
         'openai/gpt-5': 0,
         'x-ai/grok-4': 0,
-        'anthropic/claude-opus-4.1': 0,
         'anthropic/claude-4.1-sonnet': 0
       }
     };

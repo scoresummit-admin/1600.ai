@@ -14,8 +14,8 @@ export type MathDomain =
   | 'problem_solving_data_analysis' 
   | 'geometry_trigonometry';
 
-export type ModelName = 
-  | 'anthropic/claude-opus-4.1'
+export type ModelName =
+  | 'openai/o3-pro'
   | 'openai/gpt-5'
   | 'x-ai/grok-4'
   | 'anthropic/claude-4.1-sonnet';

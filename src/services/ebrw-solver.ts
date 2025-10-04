@@ -54,15 +54,66 @@ Punctuation essentials: nonrestrictive equals comma pair; restrictive equals no 
 Apostrophes: singular vs plural possession; it's/its.
 Concision rule: When two choices are both grammatical and preserve meaning, choose the shortest.
 
+=====================================================
+R&W: EXPRESSION OF IDEAS PLAYBOOK (HIGH PRIORITY)
+(“Expression of Ideas” = revise to improve effectiveness for a SPECIFIED rhetorical goal: clarity, cohesion, accuracy, and purpose alignment.)
+=====================================================
+
+1) TRANSITIONS (relationship logic first, word choice second)
+   - Identify the relationship between the prior and next idea:
+     * Addition/Continuation → "also", "furthermore", "moreover"
+     * Contrast/Concession → "however", "nevertheless", "though", "whereas"
+     * Cause/Effect → "therefore", "consequently", "thus", "so"
+     * Example/Illustration → "for example", "for instance"
+     * Emphasis → "indeed", "in fact"
+     * Sequence/Time → "then", "subsequently", "earlier", "finally"
+     * Comparison/Similarity → "likewise", "similarly"
+   - Algorithm:
+     a) Read the sentence before and after the blank; summarize each in 3–5 mental words.
+     b) Choose the transition category that preserves the *exact* logical link.
+     c) Prefer the simplest, non-redundant option; avoid double-marking (e.g., “But however,”).
+     d) Check punctuation compatibility: conjunctive adverbs (e.g., "however") need proper clause joining (semicolon/period), while FANBOYS join with a comma.
+     e) Re-read with the candidate in place; if meaning shifts or redundancy appears, reject.
+
+2) RHETORICAL SYNTHESIS (meet the stated goal precisely)
+   - Read the directive (e.g., “Which option best accomplishes the goal of emphasizing ___ / summarizing ___ / highlighting contrast / matching audience ____?”).
+   - Choose the option that:
+     a) DIRECTLY addresses the specified goal words,
+     b) Uses only supportable information from the notes/passage,
+     c) Preserves tone/register and avoids exaggeration or new, unsupported claims,
+     d) Maximizes clarity and concision (no fluff, no hedging unless required).
+   - If two options are plausible, prefer the one with narrower, more directly targeted language over vague generalities.
+
+3) CONCISION & PRECISION (delete needless words; keep meaning exact)
+   - Replace wordy phrases with concise equivalents:
+     * “due to the fact that” → “because”
+     * “in order to” → “to”
+     * “is a person who” → “is”
+     * “at this point in time” → “now”
+   - Eliminate redundancy (“each and every”, “various different”).
+   - Prefer precise verbs over weak verb + noun (“make a decision” → “decide”).
+   - Avoid ambiguous pronouns; specify the noun if clarity improves.
+
+4) TONE & STYLE CONSISTENCY
+   - Match the passage’s formality and perspective.
+   - Avoid colloquialisms or loaded/emotional terms in academic contexts unless the source tone is informal.
+
+5) ADD/DELETE SENTENCE DECISIONS
+   - ADD only if new sentence clearly advances the stated purpose (e.g., clearer example, necessary contrast, key outcome).
+   - DELETE if irrelevant, redundant, off-tone, or contradicts the author goal.
+   - When asked to select a sentence that “best introduces/concludes,” ensure it encapsulates the paragraph’s main point without adding new, unaddressed details.
+
+6) ORGANIZATION / SENTENCE PLACEMENT (if applicable)
+   - The chosen location must maintain chronological or logical progression and avoid premature references (no pronoun “this/these/these findings” before antecedent).
+
 Final Check (before output)
 The chosen answer must be directly supported by your evidence list.
 Elimination notes should name a specific flaw category (see taxonomy).
 Output the JSON only.`;
 
-// EBRW concurrent duo models (removed Grok)
+// EBRW solver uses OpenAI O3 Pro exclusively (transcription still provided by o4 pipeline)
 const EBRW_MODELS = [
-  'anthropic/claude-opus-4.1',
-  'openai/gpt-5'
+  'openai/o3-pro'
 ];
 
 export class EBRWSolver {
@@ -70,12 +121,12 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 80000; // 80s total timeout - more time for Grok
-    console.log(`🔄 EBRW solver starting concurrent trio (${timeoutMs}ms timeout)...`);
-    
+    const timeoutMs = 180000; // Allow up to 3 minutes end-to-end for complex passages
+    console.log(`🔄 EBRW solver starting with ${EBRW_MODELS.length} model(s) (${timeoutMs}ms timeout)...`);
+
     try {
-      // Dispatch all four models concurrently
-      const individualTimeout = Math.min(timeoutMs * 0.9, 70000); // 90% of total timeout, max 70s
+      // Dispatch all configured models concurrently
+      const individualTimeout = Math.max(timeoutMs - 10000, Math.floor(timeoutMs * 0.9)); // leave buffer for aggregation
       
       const results = await this.raceForResults(item, individualTimeout, timeoutMs);
       
@@ -128,8 +179,8 @@ export class EBRWSolver {
       const checkEarlyConsensus = () => {
         if (hasResolved) return;
         
-        // If we have both models and they agree, return immediately
-        if (allResults.length === 2) {
+        // If we have at least two models and they agree, return immediately
+        if (allResults.length >= 2) {
           const [result1, result2] = allResults;
           if (result1.final === result2.final) {
             hasResolved = true;
@@ -263,9 +314,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       });
     }
     
-    const response = await openrouterClient(model, messages, {
+    const { response, modelUsed } = await this.invokeWithFallback(model, messages, {
       temperature: 0.05,
-      max_tokens: 5000,
+      max_tokens: 8000,
       timeout_ms: timeoutMs
     });
     
@@ -293,9 +344,9 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`${model} JSON parse error:`, error);
-      console.error(`${model} raw response:`, response.text.substring(0, 1000) + '...');
-      throw new Error(`Invalid JSON response from ${model}: ${errorMessage}`);
+      console.error(`${modelUsed} JSON parse error:`, error);
+      console.error(`${modelUsed} raw response:`, response.text.substring(0, 1000) + '...');
+      throw new Error(`Invalid JSON response from ${modelUsed}: ${errorMessage}`);
     }
     
     const finalAnswer = result.answer || 'A';
@@ -316,8 +367,41 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
         elimination_notes: result.elimination,
         checks: ['evidence_extraction', 'choice_elimination']
       },
-      model
+      model: modelUsed
     };
+  }
+
+  private async invokeWithFallback(
+    primaryModel: string,
+    messages: Array<{ role: string; content: string | Array<any> }>,
+    options: { temperature: number; max_tokens: number; timeout_ms: number }
+  ): Promise<{ response: Awaited<ReturnType<typeof openrouterClient>>; modelUsed: string }> {
+    try {
+      const response = await openrouterClient(primaryModel, messages, options);
+      return { response, modelUsed: primaryModel };
+    } catch (error) {
+      if (primaryModel === 'openai/o3-pro' && this.isVerificationFailure(error)) {
+        console.warn('⚠️ O3 Pro verification error (400). Falling back to openai/gpt-5...');
+        try {
+          const response = await openrouterClient('openai/gpt-5', messages, options);
+          return { response, modelUsed: 'openai/gpt-5' };
+        } catch (fallbackError) {
+          console.warn('⚠️ openai/gpt-5 fallback failed after O3 Pro 400:', fallbackError);
+          throw error;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private isVerificationFailure(error: unknown): boolean {
+    if (error instanceof Error) {
+      return /\b400\b/.test(error.message);
+    }
+
+    const message = typeof error === 'string' ? error : '';
+    return /\b400\b/.test(message);
   }
 
   private async selectBestEBRWResult(results: SolverResult[]): Promise<SolverResult> {
