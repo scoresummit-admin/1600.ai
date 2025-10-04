@@ -21,7 +21,7 @@ export async function openrouterClient(
   }
 
   const controller = new AbortController();
-  const timeoutMs = options.timeout_ms || 75000;
+  const timeoutMs = options.timeout_ms || 180000; // Default to 3 minute budget unless caller specifies otherwise
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   
   console.log(`🔄 OpenRouter ${model} request (${timeoutMs}ms timeout)...`);

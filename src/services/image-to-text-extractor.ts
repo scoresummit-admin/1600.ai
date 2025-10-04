@@ -129,7 +129,7 @@ export class ImageToTextExtractor {
       const response = await openrouterClient('openai/gpt-4o', messages, {
         temperature: 0,
         max_tokens: 4000,
-        timeout_ms: 30000
+        timeout_ms: 150000 // Give the transcriber up to 2.5 minutes for dense passages
       });
 
       let result;

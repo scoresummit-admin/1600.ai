@@ -121,12 +121,12 @@ export class EBRWSolver {
 
   async solve(item: RoutedItem): Promise<SolverResult> {
     const startTime = Date.now();
-    const timeoutMs = 80000; // 80s total timeout - more time for Grok
+    const timeoutMs = 180000; // Allow up to 3 minutes end-to-end for complex passages
     console.log(`🔄 EBRW solver starting with ${EBRW_MODELS.length} model(s) (${timeoutMs}ms timeout)...`);
-    
+
     try {
       // Dispatch all configured models concurrently
-      const individualTimeout = Math.min(timeoutMs * 0.9, 70000); // 90% of total timeout, max 70s
+      const individualTimeout = Math.max(timeoutMs - 10000, Math.floor(timeoutMs * 0.9)); // leave buffer for aggregation
       
       const results = await this.raceForResults(item, individualTimeout, timeoutMs);
       
