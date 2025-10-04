@@ -15,7 +15,6 @@ export type MathDomain =
   | 'geometry_trigonometry';
 
 export type ModelName =
-  | 'openai/o3-pro'
   | 'openai/gpt-5'
   | 'x-ai/grok-4'
   | 'anthropic/claude-4.1-sonnet';
