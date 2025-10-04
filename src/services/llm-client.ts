@@ -4,7 +4,8 @@ import { ModelConfig, ModelName } from '../types/sat';
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   enabled_models: [
     'anthropic/claude-opus-4.1',
-    'openai/gpt-5', 
+    'openai/gpt-5',
+    'openai/gpt-5-thinking',
     'x-ai/grok-4',
     'anthropic/claude-4.1-sonnet'
   ],
@@ -18,6 +19,12 @@ export const MODEL_CAPABILITIES = {
   'openai/gpt-5': {
     strengths: ['general_reasoning', 'math', 'coding'],
     supports_images: true,
+    context_length: 128000,
+    cost_tier: 'high'
+  },
+  'openai/gpt-5-thinking': {
+    strengths: ['reading', 'analysis', 'evidence_extraction'],
+    supports_images: false,
     context_length: 128000,
     cost_tier: 'high'
   },
@@ -50,9 +57,9 @@ export function getModelForTask(task: 'math' | 'ebrw', priority: 'speed' | 'accu
     }
   } else { // EBRW
     if (priority === 'speed') {
-      return ['openai/gpt-5', 'x-ai/grok-4'];
+      return ['openai/gpt-5-thinking'];
     } else {
-      return ['anthropic/claude-opus-4.1', 'openai/gpt-5', 'x-ai/grok-4'];
+      return ['openai/gpt-5-thinking'];
     }
   }
 }

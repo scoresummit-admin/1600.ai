@@ -6,6 +6,10 @@
       "destination": "/api/openrouter/route.py"
     },
     {
+      "source": "/api/openai/responses",
+      "destination": "/api/openai/responses.py"
+    },
+    {
       "source": "/api/py/exec",
       "destination": "/api/py/exec.py"
     },
