@@ -271,10 +271,10 @@ CRITICAL: Return ONLY valid JSON - no markdown, no explanations.`
       return { response, modelUsed: primaryModel };
     } catch (error) {
       if (primaryModel === 'openai/o3-pro' && this.isVerificationFailure(error)) {
-        console.warn('⚠️ Math solver O3 Pro verification error (400). Switching to anthropic/claude-opus-4.1 fallback.');
+        console.warn('⚠️ Math solver O3 Pro verification error (400). Switching to openai/gpt-5 fallback.');
         try {
-          const response = await openrouterClient('anthropic/claude-opus-4.1', messages, options);
-          return { response, modelUsed: 'anthropic/claude-opus-4.1' };
+          const response = await openrouterClient('openai/gpt-5', messages, options);
+          return { response, modelUsed: 'openai/gpt-5' };
         } catch (fallbackError) {
           console.warn('⚠️ Math solver fallback failed after O3 Pro 400:', fallbackError);
           throw error;

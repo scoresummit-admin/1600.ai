@@ -4,7 +4,6 @@ import { ModelConfig, ModelName } from '../types/sat';
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   enabled_models: [
     'openai/o3-pro',
-    'anthropic/claude-opus-4.1',
     'openai/gpt-5',
     'x-ai/grok-4',
     'anthropic/claude-4.1-sonnet'
@@ -32,12 +31,6 @@ export const MODEL_CAPABILITIES = {
     strengths: ['reasoning', 'analysis', 'math', 'vision'],
     supports_images: true,
     context_length: 131072,
-    cost_tier: 'high'
-  },
-  'anthropic/claude-opus-4.1': {
-    strengths: ['reading', 'analysis', 'evidence_extraction', 'vision'],
-    supports_images: true,
-    context_length: 200000,
     cost_tier: 'high'
   },
   'anthropic/claude-4.1-sonnet': {
